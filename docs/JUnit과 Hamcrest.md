@@ -133,4 +133,57 @@ JUnit이 널리 퍼진 이유 중 하나는 위에서 보는 것과 같이 목�
       (2) : 만일 위에서 예외가 발생하지 않아서 이 부분까지 실행되면 실패함
 
       (3) : 빈 줄로 남겨둬도 무방하나 명시적으로 표시해놓음
+    
+  - ##### 테스트 러너(Test runner)
+
+    ```java
+    - junit.swingui.TestRunner.run(테스트클래스.class);
+    - junit.textui.TestRunner.run(테스트클래스.class);
+    - junit.awtui.TestRunner.run(테스트클래스.class);
+    ```
+
+    대부분의 Java 통합개발환경(IDE)은 JUnit 프레임워크를 내장 지원하고 있다. 그래서 종종 JUnit이 독립적인 프레임워크라기보다는 하나의 기능처럼 느껴질 수도 있다. 하지만 JUnit 프레임워크는 엄연히 독립적인 소프트웨어이고, 애초부터 그렇게 만들어졌다. 때문에 명령행 프롬프트에서 실행하거나 셸 스크립트 등을 이용해 실행할 수도 있다. 이를 위해 JUnit은 테스트 러너라는 테스트 실행 클래스를 제공한다. 기본적으로 세 가지 실행 방법을 제공하는데, Swing UI, 텍스트 그리고 Java AWT UI이다. 다음은 DisplayTest라는 테스트 클래스를 세 가지 방식으로 모두 실행하는 예제이다.
+
+    ```java
+    import junit.framework.TestCase;
+    
+    public class DisplayTest extends TestCase {
+    	public void testGetString() {
+    		assertEquals("Happy", Display.getString());
+    	}
+    }
+    
+    public static void main(String [] args){
+    	junit.swingui.TestRunner.run(DisplayTest.class);
+    	junit.textui.TestRunner.run(DisplayTest.class);
+    	junit.awtui.TestRunner.run(DisplayTest.class);
+    }
+    ```
+
+  - ##### 테스트 스위트(Test suite)
+
+    ```
+    - 여러 개의 테스트 케이스를 한꺼번에 수행하고자 할 때
+    - 테스트 스위트는 테스트 케이스와 다른 테스트 스위트를 포함시킬 수 있다.
+    - 메소드는 반드시 public static Test suite()여야 한다.
+    - 테스트 추가는 suite.addTestSuite(테스트 클래스.class) 형식을 갖는다.
+    ```
+
+    ```java
+    Class DisplaySuiteTest {
+    	public static void main(String [] args){
+    		junit.swingui.TestRunner.run(DisplaySuiteTest.class);
+    	}
+        
+    	public static Test suite() {
+            TestSuite suite = new TestSuite();
+            suite.addTestSuite(DisplayTest.class); // 테스트 케이스 추가
+            suite.addTestSuite(DisplayReceiverTest.class);
+            suite.addTest(AnotherSuiteTest.suite()); // 다른 테스트 스위트를 포함할 경우
+            return suite;
+        }
+    }
+    ```
+
+    테스트 스위트는 여러 개의 테스트 케이스를 함께 수행할 때 사용한다. **예전에는 이런 식으로 테스트 스위트를 작성했으나 현재는 잘 사용하지 않는다.** 테스트 클래스가 추가되거나 변경될 때마다 소스를 직접 수정해야 하기 때문이다. IDE에서 제공하는 기능을 이용하거나 Ant나 Maven 등의 빌드 도구를 사용해 다수의 테스트를 수행한다. (이클립스에서는 Run As -> JUnit Test)
 
