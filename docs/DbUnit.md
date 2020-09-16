@@ -41,7 +41,7 @@ DbUnit에서 이야기하는 데이터셋(DataSet)은 데이터베이스나 그 
 <dataset>
     <seller ID="seongmink" NAME="김성민" EMAIL="sminggo5@naver.com"/>
     <seller ID="wooyoung" NAME="장우영" EMAIL="tmlu48@naver.com"/>
-    <seller ID="kidong" NAME="강기동" EMAIL="ki0050@naver.comt"/>
+    <seller ID="kidong" NAME="강기동" EMAIL="ki0050@naver.com"/>
 </dataset>
 ```
 
@@ -68,7 +68,7 @@ public interface Repository {
 public class DatabaseRepositoryTest {
     @Test
     public void testFindById() throws Exception {
-        Seller expectedSeller = new Seller("seongmink","김성민", "smingog5@naver.com");
+        Seller expectedSeller = new Seller("akahwl","이호원", "akahwl12@gmail.com");
         Repository repository = new DatabaseRepository();
         Seller actualSeller = repository.findById("seongmink");
         
@@ -83,3 +83,176 @@ public class DatabaseRepositoryTest {
 위 테스트 케이스는 단순히 ID 값으로 조회해서 나온 결과를 예상 결과와 비교하는 로직이기 때문에, 이 상태에서 곧바로 DatabaseRepository 구현에 들어가도 별 무리는 없다. 하지만 현재 가정한 테이터베이스 내의 데이터 내용이 변경된다면, 기능 구현에 문제가 없음에도 불구하고 테스트 케이스가 실패할 수 있다. 따라서 **현재 가정되어 있는 DB 안의 데이터 상태가 테스트를 수행하기 전에 가정했던 모습으로 한결같이 유지됐으면 좋겠다**고 생각하여 다음과 같은 전략을 세웠다.
 
 ![](../images/5-2.jpg)
+
+이제 DbUnit을 테스트 케이스 작성에 이용해보자. DbUnit의 테이블 초기화 기능을 이용해서 위와 같은 형태로 테스트 케이스가 수행되도록 만들 생각이다. DBMS는 Apache Derby DB를 사용했다. Derby DB는 설치 및 사용 방법이 매우 간단한 DB이다.
+
+```java
+public class DatabaseRepositoryTest {
+    private final String driver = "org.apache.derby.jdbc.EmbeddedDriver";
+    private final String protocol = "jdbc:derby:";
+    private final String dbName = "shopdb";
+    
+    private IDatabaseTester databaseTester; // (1)
+    
+    @Before
+    public void setUp() throws Exception {
+        databaseTester = new JdbcDatabaseTester(driver, protocol + dbName); // (2)
+        try {
+            IDataSet dataSet = new FlatXmlDataSetBuilder().build(new File("seller.xml")); // (3)
+            DatabaseOperation.CLEAN_INSERT.execute(databaseTester.getConnection(), dataSet); // (4)
+        } finally {
+        databaseTester.getConnection().close();
+        }
+    }
+}
+```
+
+(1) : DbUnit을 사용하기 위해서는 테스트 클래스가 DbUnit에서 제공하는 DBTestCase 를 상속하도록 작성한다. 하지만 상속받아도 도움받는 부분이 많지 않은데다, 이 경우 JUnit 3 버전을 사용해야 한다는 단점이 있다. DBTestCase 클래스를 상속하지 않고, DbUnit에서 제공하는 기능을 이용하려면 IDatabaseTester라는 인터페이스를 사용하면 된다. 사실 DBTestCase 클래스도 내부적으로는 IDatabaseTester를 사용하고 있기 때문에 동작상 큰 차이는 없다. IDatabaseTester에는 DB 연결과 데이터 셋 관련 기능이 정의되어 있다.
+
+(2) : 이 예제에서는 IDatabaseTester 구현체로 JDBC 연결 방식을 이용하는 JdbcDatabaseTester 클래스를 사용했다. DbUnit에서는 기본적으로 다음과 같은 네 개의 구현체를 제공한다.
+
+| 구현체                            | 설명                                                         |
+| --------------------------------- | ------------------------------------------------------------ |
+| JdbcDatabaseTester                | DriverManager를 이용해 DB 커넥션을 생성                      |
+| PropertiesBasedJdbcDatabaseTester | DriverManager를 이용해 DB 커넥션을 생성. <br />단, 연결 설정은 시스템 프로퍼티로부터 읽어들인다. |
+| DataSourceDatabaseTester          | javax.sql.DataSource를 이용해 DB 커넥션을 생성               |
+| JndiDatabaseTester                | JNDI를 이용해 DataSource를 가져온다                          |
+
+(3) : 데이터셋을 지정한다. 위 예제의 경우엔 앞에서 보여준 판매자 데이터셋인 seller. xml을 지정했다.
+
+(4) :  DB 커넥션과 데이터셋을 이용해 DB에 특정 작업을 수행한다. DatabaseOperation에는 여러 종류가 있는데, 그중 CLEAN_INSERT는 데이터셋에 지정된 DB 테이블의 내용을 모두 지운 다음, 데이터셋에 들어 있는 값으로 채워넣는다. 의미적으로 DatabaseOperation의 DELETE_ALL과 INSERT 두 동작을 연속적으로 수행한 것과 동일하다.
+
+![](../images/5-3.jpg)
+
+이제 위 setUp 메소드는 테스트 메소드가 수행되기 전에 항상 seller.xml에 지정된 상태로 테이블을 초기화한다. 다음은 위 테스트 케이스를 이용해 작성한 DatabaseRepository 클래스다. JDBC 드라이버를 이용해 DB에 접속한 다음, ID에 해당하는 판매자를 받아오는 아주 기본적인 코드다.
+
+##### DB를 저장소로 사용하는 DatabaseRepository 클래스
+
+```java
+package main.eshop;
+import Java.sql.*;
+
+public class DatabaseRepository implements Repository {
+    private final String driver = "org.apache.derby.jdbc.EmbeddedDriver";
+    private final String protocol = "jdbc:derby:";
+    private final String dbName = "shopdb";
+    private Connection conn;
+    
+    public DatabaseRepository() throws Exception {
+        Class.forName(driver).newInstance();
+        conn = DriverManager.getConnection(protocol + dbName);
+    }
+    
+    public Seller findById(String id) {
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
+        Seller seller = null;
+        
+        try {
+        	String query = "select ID, name, email" 
+                + " from seller where ID = ?"; // (1)
+        stmt = conn.prepareStatement(query);
+        stmt.setString(1, id);
+        rs = stmt.executeQuery();
+        if ( !rs.next() ){
+        	throw new SQLException("No Data Found!"); // (2)
+        }
+        seller = new Seller(rs.getString(1), rs.getString(2),
+        rs.getString(3)); // (3)
+        rs.close();
+        stmt.close();
+        conn.close();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return seller;
+    }
+    
+    @Override
+    public void remove(Seller seller) {}
+    
+    @Override
+    public void update(Seller seller) {}
+    
+    @Override
+    public void add(Seller seller) {}
+}
+```
+
+(1) : ID를 기준으로 판매자 정보(ID, NAME, EMAIL)를 불러온다.
+
+(2) : 1건도 존재하지 않으면 SQLException을 발생시킨다.
+
+(3) : SQL 실행 결과를 Seller 클래스에 담는다.
+
+### 데이터셋 비교
+
+이번엔 판매자를 추가하는 기능을 구현하고자 한다. 테스트 케이스를 다음과 같이 추가했다.
+
+##### 판매자 추가 기능 구현을 위해 작성한 테스트 케이스
+
+```java
+@Test
+public void testAddNewSeller() throws Exception {
+    Seller newSeller = new Seller("akahwl","이호원","akahwl12@gmail.com");
+    Repository repository = new DatabaseRepository();
+	repository.add(newSeller); // 새로운 판매자 추가
+    Seller sellerFromRepository = repository.findById("akahwl");
+    
+    assertEquals(newSeller.getId(),sellerFromRepository.getId());
+    assertEquals(newSeller.getName(),sellerFromRepository.getName());
+    assertEquals(newSeller.getEmail(),sellerFromRepository.getEmail());
+}
+```
+
+테스트 케이스의 흐름을 살펴보면, 이호원이라는 판매자를 생성해서 저장소에 추가하고, 정상 저장됐는지 확인하기 위해 판매자의 아이디로 저장소에서 찾아온다. 그리고는 저장소에서 ID로 찾아낸 판매자의 정보가 예상값과 같은지 비교한다. 앞서 작성한 @Before 애노테이션이 붙은 setUp 메소드로 인해 seller 테이블은 계속 초기화될 테니, 향후에도 지속적으로 동일한 테스트가 가능할 것이다. 이제는 특별히 고민할 필요 없이 테스트 케이스를 기준으로 구현을 진행해나가면 된다.
+
+흔히 CRUD 기능을 구현할 때 테스트 케이스 작성 시 취하는 흔한 방식은, 우선 조회 계열 기능을 제일 먼저 TDD로 구현하고, 그 다음 추가/수정/삭제 등은 해당 조회 기능을 이용해 검증하도록 작성한다. 위 예제에서도 비슷한데, testAddNewSeller 테스트 메소드는 테스트의 성공/실패 판단을 findById 기능에 전적으로 의존하고 있다. 이런 식의 테스트 케이스 작성이 별다른 문제처럼 느껴지진 않는다. 다만 나중에는 문제가 될 소지는 남아 있다. 그럼, 어떤 경우에 문제가 생길까? 어느 날, 다음과 같은 상황이 발생했다고 생각해보자
+
+- 조회 기능 구현에 오류가 있는 걸 발견한다.
+- 조회 기능을 수정해야 할 일이 발생한다.
+
+이런 경우, 조회 기능을 수정했더니 다른 테스트 메소드들이 한꺼번에 와장창 깨져버리는 일이 발생할 수 있다. 해당 테스트 메소드 내에서 검증하고자 하는 실제 기능들엔 아무런 문제가 없음에도 말이다. 비슷한 식으로, 만일 TDD로 작업된 소스에서 어느 한 부분을 고쳤더니 여러 개의 테스트 케이스가 동시에 실패한다면, 이런 경우가 아닌지 의심해볼 필요가 있다. 테스트 케이스 작성의 기본 원칙은, 하나의 테스트 케이스는 다른 부분에서 영향받는 부분이 최소화되어 있어야 한다는 것이다. 위 예제도 조회 기능에 의존하지 않고, 결과를 검증할 수 있게 만들려면 어떻게 하면 좋을까? 여러 가지 방법을 사용할 수 있지만, 여기서는 DbUnit의 데이터셋을 이용해 검증해보자. 다음은 결과 비교에 데 이터셋을 사용하는 테스트 실행계획이다.
+
+![](../images/5-4.jpg)
+
+##### DbUnit의 테이블 비교 기능을 이용해 다시 작성한 테스트 메소드
+
+```java
+@Test
+public void testAddNewSeller() throws Exception {
+    Seller newSeller = new Seller("akahwl","이호원","akahwl12@gmail.com");
+    Repository repository = new DatabaseRepository();
+    repository.add(newSeller);
+    
+    IDataSet currentDBdataSet = databaseTester.getConnection().createDataSet(); // (1)
+    ITable actualTable = currentDBdataSet.getTable("seller"); // (2)
+    IDataSet expectedDataSet = new FlatXmlDataSetBuilder().build(new File("expected_seller.xml")); // (3)
+	ITable expectedTable = expectedDataSet.getTable("seller"); // (4)
+    
+    Assertion.assertEquals(expectedTable, actualTable); // (5)
+}
+```
+
+(1) : 현재 데이터베이스의 상태를 테이터셋으로 추출한다. createDataSet에 파라미터로 테이블 이름을 지정할 수도 있다. 지정하지 않으면 접속 유저 소유의 전체 테이블과 데이터를 데이터셋으로 만든다.
+
+(2) : 데이터셋에서 특정 테이블(seller)을 가져온다.
+
+(3) : 미리 만들어놓은 예상 데이터셋을 읽어들인다.
+
+##### expected_seller.xml
+
+```xml
+<?xml version='1.0' encoding='UTF-8'?>
+<dataset>
+    <seller ID="seongmink" NAME="김성민" EMAIL="sminggo5@naver.com"/>
+    <seller ID="wooyoung" NAME="장우영" EMAIL="tmlu48@naver.com"/>
+    <seller ID="kidong" NAME="강기동" EMAIL="ki0050@naver.com"/>
+    <seller ID="akahwl" NAME="이호원" EMAIL="akahwl12@gmail.com"/>
+</dataset>
+```
+
+(4) : 예상 데이터셋 중에서 비교에 사용할 테이블을 읽어들인다. 
+
+(5) : DbUnit에서 제공하는 Assertion 클래스의 메소드를 이용해 결과를 비교한다.
+
