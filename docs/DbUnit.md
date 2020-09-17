@@ -120,7 +120,7 @@ public class DatabaseRepositoryTest {
 
 (3) : 데이터셋을 지정한다. 위 예제의 경우엔 앞에서 보여준 판매자 데이터셋인 seller. xml을 지정했다.
 
-(4) :  DB 커넥션과 데이터셋을 이용해 DB에 특정 작업을 수행한다. DatabaseOperation에는 여러 종류가 있는데, 그중 CLEAN_INSERT는 데이터셋에 지정된 DB 테이블의 내용을 모두 지운 다음, 데이터셋에 들어 있는 값으로 채워넣는다. 의미적으로 DatabaseOperation의 DELETE_ALL과 INSERT 두 동작을 연속적으로 수행한 것과 동일하다.
+(4) : DB 커넥션과 데이터셋을 이용해 DB에 특정 작업을 수행한다. DatabaseOperation에는 여러 종류가 있는데, 그중 CLEAN_INSERT는 데이터셋에 지정된 DB 테이블의 내용을 모두 지운 다음, 데이터셋에 들어 있는 값으로 채워넣는다. 의미적으로 DatabaseOperation의 DELETE_ALL과 INSERT 두 동작을 연속적으로 수행한 것과 동일하다.
 
 ![](../images/5-3.jpg)
 
@@ -256,3 +256,127 @@ public void testAddNewSeller() throws Exception {
 
 (5) : DbUnit에서 제공하는 Assertion 클래스의 메소드를 이용해 결과를 비교한다.
 
+##### DbUnit에서 제공하는 Assertion 클래스의 메소드
+
+```java
+public class Assertion {
+    public static void assertEquals(ITable expected, ITable actual)
+    public static void assertEquals(IDataSet expected, IDataSet actual)
+}
+```
+
+ JUnit에서는 제공하지 않는 ITable 타입과 IDataSet 타입의 비교를 지원해준다. 만일 데이터셋을 직접 비교하고 싶으면 다음과 같이 작성한다.
+
+```java
+…
+	IDataSet currentDBdataSet 
+	    = databaseTester.getConnection().createDataSet(new String[]{"seller"});
+	IDataSet expectedDataSet 
+        = new FlatXmlDataSetBuilder().build(new File("expected_seller.xml"));
+	Assertion.assertEquals(expectedDataSet, currentDBdataSet);
+…
+```
+
+> ##### 주의
+>
+> DbUnit은 위 예제의 경우처럼 데이터베이스의 스냅샷(Snapshot, 특정 시점의 상태나 이미지)을 잡아 테이블로 추출 할 때, 해당 테이블의 기본키(primary key, PK) 값으로 정렬한다. 하지만 데이터셋을 파일로부터 읽어들일 때는 해당 테이블을 정렬하지 않는다. 그래서 만일 새로운 데이터가 테이블에 추가되어 PK 정렬로 인해 순서가 달라지면 동일한 내용의 데이터셋임에도 오류가 발생할 수 있다. 이럴 경우에는 SQL을 이용해 데이터셋의 일부만을 추출할 수 있게 도와주는 createQueryTable을 사용해서 직접 sql에 “ORDER BY” 구문을 포함시켜 버리거나, 아니면 파일로부터 읽어들인 데이터셋 테이블을 SortedTable 클래스로 정렬한 다음 비교하면 된다.
+>
+> ```java
+> // 자동 정렬이 일어나지 않도록 SQL 문을 지정하든가
+> ITable actualTable = connection.createQueryTable("seller", "select * from seller");
+> 
+> // 예상 결과 데이터셋 값을 정렬시켜 버리든가
+> Assertion.assertEquals(new SortedTable(expectedTable), actualTable); 
+> ```
+
+## DbUnit 데이터셋의 종류
+
+데이터셋이란 개념은 하나의 타입을 나타냄과 동시에 테이블들의 집합체를 표현하는 IDataSet 인터페이스의 구현체를 의미하기도 한다. 앞서 본 seller. xml 파일은 그중 FlatXmlDataSet으로 표현된 데이터셋이다
+
+### FlatXmlDataSet
+
+- 테이블 이름을 XML TAG 구성요소로 적는다.
+- 컬럼 이름은 속성으로 적는다.
+- 널(null)값을 넣을 컬럼은 표현하지 않는다. 자동으로 널값이 들어간다.
+- XML DTD(Document Type Definitions)를 지정하지 않아도 된다.
+- 데이터셋 중 가장 흔하게 사용된다.
+
+##### FlatXmlDataSet 형식으로 작성된 XML 파일
+
+```xml
+<dataset>
+    <EMPLOYEE NO="101" NAME="김성민" EMAIL="sminggo5@naver.com"/>
+    <EMPLOYEE NO="102" NAME="강기동" />
+    <DEPARTMENT />
+</dataset>
+```
+
+### XmlDataSet
+
+- 다소 장황한 버전의 데이터셋
+- DTD를 반드시 포함해야 한다.
+- 잘 사용하지 않는다.
+
+### StreamingDataSet
+
+- 데이터베이스의 커서(cursor) 개념처럼 단방향으로 동작하며 현재 레코드만 메모리에 존재한다.
+- UPDATE, INSERT, REFRESH 같은 동작을 하는 XML 데이터셋을 읽어들일 때 매우 효율적으로 동작한다.
+
+```java
+IDataSetProducer producer = new FlatXmlProducer(new InputSource("dataset.xml"));
+IDataSet dataSet = new StreamingDataSet(producer);
+```
+
+### DatabaseDataSet
+
+- 데이터베이스 인스턴스에 대한 접근을 제공한다.
+- 직접 new로 생성하지 않고 팩토리 메소드로 만들어낸다
+
+```java
+IDataSet currentDBdataSet = IDatabaseConnection.createDataSet();
+```
+
+### QueryDataSet
+
+- 쿼리문으로 데이터셋을 만들어낸다.
+
+##### 사번이 600번 이상인 직원과 DEPARTMENT 테이블 전체를 데이터셋에 담는다.
+
+```java
+QueryDataSet dataSet = new QueryDataSet(connection);
+dataSet.addTable("NEW_EMPLOYEE", "SELECT * FROM EMPLOYEE WHERE EMPNO >
+600");
+dataSet.addTable("DEPARTMENT");
+```
+
+### XlsDataSet
+
+- MS 엑셀 문서를 데이터셋으로 인식한다.
+- 엑셀 문서 내의 각 시트(sheet)를 테이블로 인식한다.
+- 시트의 첫 번째 줄을 컬럼 이름으로 인식한다.
+- 나머지 줄은 데이터 값으로 인식한다.
+
+![](../images/5-5.jpg)
+
+ITEM 테이블과 WAREHOUSE 테이블도 다른 시트에서 표현하고 있다.
+
+### ReplacementDataSet
+
+- 데이터셋에서 특정한 문자열을 치환하기 위해 사용한다.
+- 보통은 null 값을 다르게 표현하고 런타임 시에 치환하는 데 많이 사용한다.
+
+```xml
+<dataset>
+    <EMPLOYEE NO="101" NAME="김성민" EMAIL="sminggo5@naver.com"/>
+    <EMPLOYEE NO="102" NAME="강기동" EMAIL="[null]"/>
+</dataset>
+```
+
+데이터셋 파일은 위와 같이 만든 다음 아래와 같은 코드로 읽어들여서 null 값을 변환 한다.
+
+```java
+ReplacementDataSet dataSet = new ReplacementDataSet(new FlatXmlDataSet(... ...));
+dataSet.addReplacementObject("[NULL]", null);
+```
+
+이 외에도 CompositeDataSet과 FilteredDataSet 등이 있다.
