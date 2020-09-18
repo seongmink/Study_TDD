@@ -380,3 +380,186 @@ dataSet.addReplacementObject("[NULL]", null);
 ```
 
 이 외에도 CompositeDataSet과 FilteredDataSet 등이 있다.
+
+## DbUnit의 DB 지원 기능
+
+DbUnit에서는 데이터셋을 이용한 DB 관리 작업을 DatabaseOperation이라는 개념으로 만들어놓았다. 사용 방법은 아래와 같다.
+
+```java
+DatabaseOperation.오퍼레이션이름.execute( DB커넥션, 데이터셋 );
+```
+
+다음은 DbUnit에서 사용할 수 있는 오퍼레이션의 종류다.
+
+| DatabaseOperation의 종류           | 설명                                                         |
+| ---------------------------------- | ------------------------------------------------------------ |
+| DatabaseOperation.INSERT           | 데이터베이스에 데이터셋 내용을 INSERT한다. PK(primary key)를 기준으로 대상 테이블에 중복 데이터가 들어 있지 않다는 가정하에서 동작하기 때문에 중복 데이터가 존재하면 실패로 간주한다. FK(foreign key, 참조키)가 걸려 있는 테이블의 경우 데이터셋의 순서에 따라 정상적으로 INSERT가 안 될 수 있으므로 유의한다 |
+| DatabaseOperation.DELETE_ALL       | 데이터셋에 지정된 테이블들의 데이터를 모두 지운다. 지정되지 않은 테이블들은 건드리지 않는다. |
+| **DatabaseOperation.CLEAN_INSERT** | 데이터셋에 지정된 테이블에 대해 DELETE_ALL을 수행한 다음, 데이터셋에 있는 데이터 값을 INSERT한다. 즉, DELETE_ALL + INSERT와 동일하다. **REFRESH와 함께 매우 잘 사용되는 기능이다.** |
+| DatabaseOperation.UPDATE           | 데이터셋의 내용으로 테이블을 업데이트한다. UPDATE의 기준은 INSERT와 마찬가지로 PK 컬럼이 된다. |
+| **DatabaseOperation.REFRESH**      | **CLEAN_INSERT와 함께 가장 많이 사용되는 기능.** 대상 테이블에 존재하지 않는 데이터는 INSERT, 이미 존재하는 데이터일 경우에는 UPDATE한다. 둘 다에 속하지 않는, 이미 테이블에 존재하는 데이터는 건드리지 않는다. |
+| DatabaseOperation.DELETE           | 데이터셋과 일치하는 데이터를 테이블에서 지운다. 테이블 전체를 지우지는 않는다. |
+| DatabaseOperation.TRUNCATE         | 데이터셋에 지정된 테이블들의 데이터를 모두 지운다. TRUNCATE는 DELETE와 달리 롤백(rollback)이 불가능하다. 테이블 데이터 삭제 작업은 데이터셋에 지정된 테이블 순서의 역순으로 적용된다. |
+| CompositeOperation                 | 여러 개의 DatabaseOperation을 하나로 묶어서 한 번에 실행한다. 이런 방식을 DatabaseOperation 클래스를 데코레이트(decorate) 한다고 표현한다.<br />DatabaseOperation op = new CompositeOperation(<br /> 　　　　　　　DatabaseOperation.DELETE_ALL,<br /> 　　　　　　　DatabaseOperation.INSERT); op.execute(connection, xmlDataSet);<br />위 코드는 DELETE_ALL과 INSERT를 하나의 DatabaseOperation으로 묶은 모습이다. |
+| TransactionOperation               | 데이터셋을 처리할 때 트랜잭션으로 묶어서 처리할 것인지를 결정한다. DatabaseOperation 클래스를 데코레이트한다.<br />DatabaseOperation op = new CompositeOperation(<br /> 　　　　　　　DatabaseOperation.DELETE_ALL,<br /> 　　　　　　　DatabaseOperation.INSERT); op = new TransactionOperation(operation); op.execute(connection, xmlDataSet);<br />위 코드는 DELETE_ALL과 INSERT를 하나의 DatabaseOperation으로 묶은 다음 그 오퍼레이션에 트랜잭션을 걸어놓은 모습이다. 중간에 실패하는 부분이 있으면, 전부 롤백한다 |
+| IdentityInsertOperation            | MSSQL 서버의 IDENTITY 컬럼을 잠시 비활성화시킨 상태로 만들어 INSERT 시에 오류가 발생하지 않도록 도와준다. 참고로, IDENTITY 컬럼은 자동으로 숫자가 증가해서 입력되는 컬럼으로, 특정 값을 강제로 넣는 것이 일반적인 INSERT 문으로는 불가능하다 |
+
+## DbUnit과 Ant
+
+DbUnit은 DbUnit 라이브러리 코드를 테스트 케이스 내에서 직접 선언해 수행할 수도 있지만, Ant를 이용해 처리할 수도 있다.  DB를 다루는 작업인 만큼, DbUnit의 기능을 Ant로 수행하는 것이 더 편한 경우가 많다. 그리고 Ant를 사용하면 개발툴이나 IDE에 의존하지 않고, 시스템 레벨에서 배치 작업 등을 이용해 좀 더 높은 수준의 자동화를 이룰 수 있다.
+
+### DbUnit에서 Ant를 이용하기 위한 준비 단계
+
+Ant의 클래스패스 내에 dbunit.jar 파일을 추가한다. 그리고 DbUnit은 Ant에서 지원하는 기본 태스크가 아니기 때문에, 사용자 태스크로 지정할 필요가 있다. Ant 빌드파일 내에 태스크를 정의한다.
+
+```
+<taskdef name="dbunit" classname="org.dbunit.ant.DbUnitTask"/>
+```
+
+그런데 위 태스크 정의가 정상적으로 동작하려면 dbunit.jar 파일이 클래스패스 내에 존재해야 한다. 빌드파일에서 참조하는 라이브러리는 가급적 해당 파일 내에서 확인할 수 있도록 하는 것이 좋다.
+
+![](../images/5-6.jpg)
+
+##### Ant의 빌드파일로 사용할 build.xml
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+    <project name="SellerManagement" default="test" basedir=".">
+        <target name="test" depends=""/>
+        
+        <taskdef name="dbunit" classname="org.dbunit.ant.DbUnitTask">
+            <classpath>
+            	<fileset dir="${basedir}/lib" includes="**/*.jar"/>
+            </classpath>
+    </taskdef>
+</project>
+```
+
+이제 dbunit이라는 이름의 Ant 태스크가 정의됐다. 이제 DbUnit을 Ant에서 사용할 준비가 됐다. 
+
+앞에서 작성한 RepositoryTest 클래스의 @Before 부분을 살펴보자.
+
+```java
+private final String driver = "org.apache.derby.jdbc.EmbeddedDriver";
+private final String protocol = "jdbc:derby:";
+private final String dbName = "shopdb";
+
+@Before
+public void setUp() throws Exception{
+    databaseTester = new JdbcDatabaseTester(driver, protocol + dbName);
+    connection = databaseTester.getConnection();
+    IDataSet dataSet = new FlatXmlDataSetBuilder().build(new File("seller.xml"));
+    DatabaseOperation.CLEAN_INSERT.execute(connection, dataSet);
+}
+```
+
+테스트를 수행하기 전에 데이터를 초기화하는 코드다. 이걸 Ant 스크립트로 전환하면 다음과 같다.
+
+```xml
+<target name="sellerdb-init">
+    <dbunit driver="org.apache.derby.jdbc.EmbeddedDriver"
+        url="jdbc:derby:shopdb"
+        userid=""
+        password=""
+        >
+    	<operation type="CLEAN_INSERT" src="seller.xml"/>
+    </dbunit>
+</target>
+```
+
+이런 식으로 무언가 일괄적으로 DbUnit을 이용해 DB를 조작할 때 Ant를 이용하면 유리하다. 특히 특정 데이터베이스나 테이블의 스냅샷을 잡아 스크립트로 만들어놓을 때 Ant와 DbUnit을 함께 쓰면 좋다.
+
+dbunit.xml 파일의 뼈대가 아래와 같다고 가정한다.
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="dbunit" default="export" basedir=".">
+    <property name="driver" value="org.apache.derby.jdbc.EmbeddedDriver" />
+    <property name="uri" value="jdbc:derby:shopdb" />
+    <property name="userid" value="" />
+    <property name="password" value="" />
+    
+...
+...
+    
+</project>
+```
+
+##### 유저테이블 전체를 export 받기
+
+```xml
+<dbunit driver="${driver}" url="${uri}" userid="${userid}"
+        password="${password}">
+	<export dest="export.xml" />
+</dbunit>
+```
+
+참고로, export는 기본적으로 UTF-8로 인코딩돼서 파일로 만들어진다. export 옵션 중 encoding이 있는데, xml 파일에 한정되어 적용된다는 점에 주의하자.
+
+##### 특정 쿼리의 결과나 특정 테이블만 export 받기
+
+```xml
+<dbunit driver="${driver}" url="${uri}" userid="${userid}" 
+        password="${password}">
+    <export dest="export.xml" >
+        <query name="item" sql="select PRODUCTNO, NAME, PRICE from item" />
+        <table name="seller" />
+    </export>
+</dbunit>
+```
+
+##### 현재 폴더에 특정 테이블만 csv 파일로 내려받기
+
+```xml
+<dbunit driver="${driver}" url="${uri}" userid="${userid}" 
+        password="${password}">
+    <export dest="." format="csv">
+   		<table name="seller" />
+    </export>
+</dbunit>
+```
+
+##### DELETE_ALL + INSERT
+
+```xml
+<dbunit driver="${driver}" url="${uri}" userid="${userid}" 
+        password="${password}" >
+	<operation type="CLEAN_INSERT" src="export.xml" />
+</dbunit>
+```
+
+##### DB 유저 전체 테이블에 대해 비교하기
+
+```xml
+<dbunit driver="${driver}" url="${uri}" userid="${userid}" 
+        password="${password}">
+	<compare src="export.xml" />
+</dbunit>
+```
+
+위 경우 export.xml은 미리 만들어놓은 예상 데이터셋이다.
+
+##### 특정 테이블이나 데이터만 비교하기
+
+```xml
+<dbunit driver="${driver}" url="${uri}" userid="${userid}" 
+        password="${password}">
+    <compare src="export.xml" >
+        <query name="item" sql="select PRODUCTNO, NAME, PRICE from item" />
+        <table name="seller" />
+    </compare>
+</dbunit>
+```
+
+## 정리
+
+DbUnit을 사용하는 것이 어렵지는 않지만, 데이터셋을 만드는 일은 비용과 노력이 많이 드는 작업이며, 때때로 ROI가 맞지 않곤 한다. 따라서 DB를 사용할 때, DbUnit을 반드시 써야 할지는 고민해볼 필요가 있다. 때에 따라서는 단순히 SQL 파일을 테스트 전후로 실행하는 편이 더 나을 수도 있기 때문이다.
+
+### DbUnit 권장 사용법
+
+- 개발자마다 데이터베이스 인스턴스나 스키마를 하나씩 쓸 수 있게 하라.
+- 나중에 정리(tearDown)를 할 필요가 없도록 setUp 처리를 잘 하자.
+- 데이터셋은 크기를 작게 하고 여러 개로 만들어라. 꼭 필요한 테스트 데이터 위주로 만들자.
+- 데이터셋을 너무 많이 만들지 마라. 유지보수가 힘들다.
+- 데이터셋은 테스트 클래스 기반으로 만들고, 여타 테스트 클래스와 공유해서 사용하 지 말자.
+- 테스트용 데이터베이스에서는 참조키(foreign key)나 널값 제약(not null constraint) 기능을 꺼놓으면 편리하다.
