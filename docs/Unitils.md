@@ -98,3 +98,223 @@ public class BookTest {
 리플렉션 단정문을 사용하면 테스트가 깔끔하게 성공한다.
 
 Unitils의 assertReflectionEquals를 사용하면 이런 식으로 객체의 동치성을 증명해준다. 이걸 Unitils에서는 리플렉션을 이용한 단정(reflection assertion)이라고 부른다. Unitils의 이런 리플렉션 단정문에 몇 가지 옵션을 지정할 수 있는데, 대부분은 소스코드가 리팩토링이 일어나면서 발생하는 테스트 케이스의 깨짐(fragility of test)을 보완하기 위해 사용된다. 이 방식을 너그러운 단정문(lenient assertions) 적용이라고 부른다.
+
+### 리플렉션 단정문의 너그러운 비교(Lenient Assertion)
+
+```java
+assertReflectionEquals(예상 객체, 실제 객체, ReflectionComparatorMode);
+```
+
+앞서 본 assertReflectionEquals의 맨 마지막에 ReflectionComparatorMode(리플렉션 비교모드)라는 옵션이 하나 더 붙어 있는 모습이다. ReflectionComparatorMode는 리플렉션으로 대상을 비교할 때 좀 더 유연한 비교를 할 수 있도록 다음과 같은 세 가지 옵션을 제공한다.
+
+| ReflectionComparatorMode | 설명                                                         |
+| ------------------------ | ------------------------------------------------------------ |
+| LENIENT_ORDER            | 컬렉션이나 배열을 비교할 때 순서는 무시한다.                 |
+| IGNORE_DEFAULTS          | 예상 객체의 필드 중 타입 기본값을 갖는 필드에 대해서는 비교를 하지 않는다. |
+| LENIENT_DATES            | 시간이나 날짜 타입은 서로 비교하지 않는다.                   |
+
+#### LENIENT_ORDER(너그러운 순서)
+
+배열 객체를 서로 비교하게 될 때 순서가 다르면 다른 객체로 판정한다. 그런데 경우에 따라서 배열 안에 들어 있는 원소들이 중요하지, 들어가 있는 순서는 상관없는 경우가 있다. 이럴 때 LENIENT_ORDER라는 옵션을 사용한다.
+
+```java
+List<Integer> myList = Arrays.asList(3, 2, 1);
+assertReflectionEquals(Arrays.asList(1, 2, 3), myList, LENIENT_ORDER);
+```
+
+참고로 ReflectionComparatorMode를 사용하려면 org.unitils.reflectionassert. ReflectionComparatorMode 클래스를 static import로 추가해줘야 한다.
+
+#### IGNORE_DEFAULTS(필드 기본값 무시)
+
+Java의 타입 기본값, 이를테면 int 타입의 0, 객체의 null, boolean의 false는 각 타입의 기본값이다. assertReflectionEquals로 두 객체의 동치성을 비교할 때, 만일 필드 의 값에 위에 같은 타입 기본값이 할당되어 있을 경우 동치성 판단 여부에 포함시키 지 않는다.
+
+```java
+Item expectedItem = new Item("IKH-001", null, 24000);
+Item actualItem = new Item("IKH-001", "20200101", 24000);
+assertReflectionEquals(expectedItem, actualItem, IGNORE_DEFAULTS);
+```
+
+위와 같은 경우에는 Item 객체의 두 번째 필드 값에 할당하는 값은 동치성 비교에 포함되지 않도록 해줬기 때문에 assertReflectionEquals는 참(true)이 되고 테스트는 성공한다. IGNORE_DEFAULTS 옵션이 없었다면 테스트가 실패하고 붉은색 막대(false)가 나타났을 것이다. 이때 유의할 점이 하나 있는데, 필드 기본값을 비교에서 제외하는 건 expected 객체를 기준으로 한다는 점이다. 만일 위 예제에서 actualItem과 expectedItem의 순서를 바꿔서 테스트했다면, 실패로 단정한다
+
+```java
+Item expectedItem = new Item("IKH-001", "20200101", 24000);
+Item actualItem = new Item("IKH-001", null, 24000);
+assertReflectionEquals(expectedItem, actualItem, IGNORE_DEFAULTS);
+```
+
+즉, 위와 같이 expected에는 type 기본값이 없지만, actual에는 0이나 null 같은 타입 기본값이 존재한다면 실패로 판정된다. 미묘한 부분이긴 한데, 어쨌든 IGNORE_DEFAULTS 옵션을 사용한다면 expected와 actual의 위치를 지켜줘야 한다.
+
+#### LENIENT_DATES(너그러운 날짜)
+
+객체값을 비교할 때 종종 테스트를 만들기가 어려운 경우는, 로그성 날짜가 들어가는 필드값이 쓰일 때다. 이를테면 주문일시, 등록일자, 접수시간 등의 필드는 실제 해당 값이 생성되는 시점의 '시스템 타임'이 값으로 채워지는 경우가 많다. 그런데 테스트 케이스를 만들어서 수행하는 경우에는 테스트할 때마다 시스템 시간이 달라지기 때문에 예상값을 특정해놓기가 어렵다. 그래서 이런저런 편법을 사용해 날짜 비교를 무시하도록 유도하곤 하는데, Unitils에서는 해당 부분을 LENIENT_DATES라는 옵션으로 해결해주고 있다.
+
+```java
+Item expectedItem = new Item("IKH-001", null, 24000,
+new Date(System.currentTimeMillis()+100));
+Item actualItem = new Item("IKH-001", null, 24000,
+new Date(System.currentTimeMillis()));
+assertReflectionEquals(expectedItem, actualItem, LENIENT_DATES);
+```
+
+위 경우, 두 객체의 필드값을 비교할 때 Date 타입에 해당하는 필드는 동치성 비교에서 제외한다. 즉, 위 테스트 케이스는 녹색 막대로 표시된다.
+
+흔히 날짜/시간 등은 비교 시 불편한 점이 많아, Date 타입을 만들어 사용하기보다는 SimpleDateFormat 등을 이용해 String으로 변환해서 사용하는 경우가 종종 있다. 이럴 경우 LENIENT_DATES를 사용하면 String으로 굳이 변환하는 작업을 줄일 수 있고, DB 등을 이용하지 않고 시스템 내에서 날짜 관련 작업을 처리해야 하는 경우에 유용한 옵션이다.
+
+참고로, Unitils에는 **assertLenientEquals**라는 것이 있는데, ReflectionComparatorMode를 사용하는 assertReflectionEquals의 간략화 버전으로, 위에 세 개의 옵션 중 LENIENT_DATES를 제외한 두 개를 동시에 적용해서 비교하는 버전이다.
+
+```java
+// 컬렉션의 순서가 다른 경우
+List<Integer> bag = Arrays.asList(100, 200, 300);
+assertLenientEquals(Arrays.asList(300, 200, 100), bag);
+
+// 배열의 순서가 다른 경우
+assertLenientEquals(new String[]{"a", "B", "c"}, new String[]{"B",
+"c","a"});
+
+// 필드값이 타입 기본값일 경우 비교에서 제외
+Item expectedItem = new Item("IKH-001", null, 24000);
+Item actualItem = new Item("IKH-001", "20200101", 24000);
+assertLenientEquals(expectedItem, actualItem);
+```
+
+위 세 개의 단정문은 모두 참이 된다.
+
+### 프로퍼티 단정문(Property Assertions)
+
+보통, 객체의 특정 필드에 예상하는 값이 제대로 할당됐는지 확인하는 가장 간단한 방법은 getter 메소드를 통해 해당 필드 변수에 들어가 있는 값을 직접 확인해보는 것이다.
+
+```java
+@Test
+public void testLoadPlayerTest() throws Exception {
+	// 저장소에서 주장 캐릭터의 정보를 불러온다.
+    Player player = VolleyballTeamRepository.getCaptain();
+    assertEquals("Ku Min-jung", player.getName());
+}
+```
+
+이런 식으로 비교를 하면 된다. 그런데 경우에 따라서는 getter 메소드가 제공되지 않는 경우도 있다. 아래는 배구 게임의 선수에 해당하는 Player 클래스의 모습이라고 가정해보자.
+
+```java
+public class Player {
+    private String name;
+    private int age; // 나이
+    private int experienceYear; // 경력
+
+    public Player(String name, int age, int experienceYear) {
+        this.name = name;
+        this.age = age;
+        this.experienceYear = experienceYear;
+    }
+    
+    public String getName() {
+        return this.name;
+    }
+    
+    public int getAbilityPoint(){ // 나이 30이 넘으면 능력이 떨어진다..
+        return (30 - this.age) + experienceYear;
+	}
+}
+```
+
+나이와 경력 값이 제대로 할당되는지를 확인하고 싶은데 현재 해당 값에 접근할 수 있게 하는 getter가 없다. Player 클래스에 getter를 만들어도 되긴 되지만, 다음 같은 상황 중 하나라고 가정해보자
+
+- 테스트할 때 외에는 해당 getter 메소드를 사용할 일이 없다. 
+- 외부에서 받은 라이브러리라서 Player 클래스를 수정할 수 없다.
+
+이런 경우 Java의 강력한 기능 중 하나인 리플렉션을 이용하면 소스를 수정하지 않고도 문제 상황을 돌파할 수 있다. 직접 만들 수도 있는데, 그러지 말고 Unitils의 assertPropertyLenientEquals를 이용하자.
+
+```java
+assertPropertyLenientEquals(속성 이름, 예상되는 속성 값, 실제 객체)
+```
+
+객체의 특정 필드값(속성값)만을 비교하고자 할 때 사용하는 기능이다.
+
+```java
+@Test
+public void testPlayerPropertyTest() throws Exception {
+    Player player = VolleyballTeamRepository.getCaptain();
+    assertPropertyLenientEquals("age", 31, player);
+    assertPropertyLenientEquals("experienceYear", 15, player);
+}
+```
+
+getter 메소드가 없지만 비교가 가능하다. assertPropertyLenientEquals의 장점 중 하나는 자바빈(JavaBeans) 규칙을 따르는 식으로 프로퍼티를 비교한다는 점이다. 만일 추후 Player 클래스 내에 getter 메소드가 생기게 된다면, assertPropertyLenientEquals는 해당 bean 규약에 맞는 getter 메소드를 이용해 프로퍼티 값을 불러와서 비교를 수행한다는 뜻이다. 단순히 리플렉션으로 클래스의 필드 변수값만을 가져와서 비교하는 수준을 넘어서고 있다.
+
+## Unitils 모듈
+
+일반적인 수준에서는 앞에서 설명한 Unitils의 기능만으로도 테스트 케이스를 작성하는 데 도움이 많이 된다. 하지만 Unitils는 이 외에도 DB 관련 기능, Hibernate, JPA, Spring, Mock Object 등에 대해서도 유용한 기능을 모듈(module)이라는 개념으로 제공하고 있다.
+
+![](../images/6-1.jpg)
+
+Unitils의 모듈은 다양한 서비스를 제공하는데, 테스트 케이스 작성 시에 해당 모듈을 사용하려면 UnitilsJUnit3, UnitilsJUnit4, UnitilsTestNG 등의 Test Listener가 필요하다. Test Listener를 사용하는 방법은 해당 Unitils의 Test Listener를 테스트 클래스가 상속하거나 @RunWith 같은 어노테이션으로 Test Runner로 지정하면 된다.
+
+##### JUnit 3의 경우, 상속을 이용한다.
+
+```java
+import org.unitils.UnitilsJUnit3;
+
+public class MyTest extends UnitilsJUnit3 {
+}
+```
+
+##### JUnit 4의 경우, UnitilsJUnit4 클래스를 상속해도 되고 Runner를 지정해도 된다.
+
+```java
+import org.junit.runner.RunWith;
+import org.unitils.UnitilsJUnit4TestClassRunner;
+
+@RunWith(UnitilsJUnit4TestClassRunner.class)
+public class MyTest {
+}
+```
+
+현재 Unitils에서 제공하는 모듈은 다음과 같다.
+
+| 모듈명          | 설명                                                         |
+| --------------- | ------------------------------------------------------------ |
+| DatabaseModule  | 데이터베이스 관리와 커넥션 풀 관련                           |
+| DbUnitModule    | DbUnit을 사용할 때 사용하는 테스트 데이터 관리               |
+| HibernateModule | 하이버네이트 설정 지원과 DB 매핑 체크                        |
+| MockModule      | Unitils에서 제공하는 Mock 프레임워크                         |
+| EasyMockModule  | EasyMock 지원 기능                                           |
+| InjectModule    | 오브젝트를 강제로 할당시켜 버리는 Injection 기능             |
+| SpringModule    | 스프링의 애플리케이션 컨텍스트 지원과 스프링 빈(beans)의 주입 기능 지원 |
+
+우선 데이터베이스 관련 기능 지원  살펴보자. 다음 소스는 사용했던 판매자 관리 기능을 테스트하던 클래스다.
+
+```java
+public class RepositoryTest {
+    private final String driver = "org.apache.derby.jdbc.EmbeddedDriver";
+    private final String protocol = "jdbc:derby:";
+    private final String dbName = "shopdb";
+    
+    private IDatabaseTester databaseTester;
+    private IDatabaseConnection connection;
+    
+    @Before
+    public void setUp() throws Exception{
+        databaseTester = new JdbcDatabaseTester(driver, protocol + dbName);
+        connection = databaseTester.getConnection();
+        IDataSet dataSet = new FlatXmlDataSetBuilder().build(new File("seller.xml"));
+        DatabaseOperation.CLEAN_INSERT.execute(connection, dataSet);
+    }
+    
+    @After
+    public void tearDown() throws Exception{
+    	this.connection.close();
+    }
+    
+    @Test
+    public void testFindById() throws Exception {
+        Repository repository = new DatabaseRepository();
+        Seller actualSeller = repository.findById("akahwl");
+
+        assertPropertyLenientEquals("id", "akahwl", actualSeller);
+        assertPropertyLenientEquals("name", "이호원", actualSeller);
+        assertPropertyLenientEquals("email", "akahwl12@gmail.com", actualSeller);
+    }
+}
+```
+
+앞으로 이 소스를 기반으로 설명이 진행될 예정이다.
+
