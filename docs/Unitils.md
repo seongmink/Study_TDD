@@ -318,3 +318,100 @@ public class RepositoryTest {
 
 앞으로 이 소스를 기반으로 설명이 진행될 예정이다.
 
+## DbUnit과 함께 사용하는 데이터베이스 지원 모듈
+
+DbUnit은 데이터베이스 단위 테스트에 매우 유용하다. Unitils는 DbUnit을 좀 더 편하게 사용할 수 있도록 편리한 기능들을 제공한다.
+
+### 환경 준비를 위한 unitils.properties 파일 설정
+
+Unitils에서 DB 접속 기능을 지원받기 위해 클래스패스 내에 unitils.properties라는 이름의 텍스트 파일을 하나 만들자(src 폴더 바로 아래에 놓아도 된다). 다음은 unitils.properties 파일의 모습이다.
+
+```properties
+database.driverClassName=org.apache.derby.jdbc.EmbeddedDriver
+database.url=jdbc:derby:shopdb
+database.userName=
+database.password=
+database.schemaNames=APP
+database.dialect=derby
+DatabaseModule.Transactional.value.default=disabled
+```
+
+driverClassName이나 url은 계속 사용해왔던 부분이다. 만일 오라클 DB를 사용했다면 이 부분은 다음과 같을 것이다.
+
+```properties
+database.driverClassName=oracle.jdbc.driver.OracleDriver
+database.url=jdbc:oracle:thin:@yourmachine:1521:YOUR_DB
+```
+
+Derby DB 임베디드 모드의 기본 스키마 이름은 APP이다. database.dialect에는 Unitils에서 DB에 맞는 내부 SQL을 사용할 수 있게 DB 종류를 적어줬다. 마지막으로 현재 애플리케이션은 자동커밋(auto-commit) 기준으로 작성됐기에, Unitils가 트랜잭션 처리를 하지 않도록 disabled로 지정해줬다. 참고로, Unitils에서 DB 사용 시의 기본 트랙잭션 관리는 커밋이다.
+
+### @DataSet
+
+Unitils는 @DataSet이라는 어노테이션을 지원하는데, 클래스이름.xml이라는 파일을 기본 데이터셋으로 인식하고 DB로 읽어들인다. 이때 데이터셋 파일은 FlatXmlDataSet 타입이어야 한다. DB로 읽어들일 때의 기본 동작은 모두 삭제하고 집어넣는 CLEAN_INSERT이다. 위 예제 소스를 Unitils의 @DataSet을 이용해 작성하면 다음과 같다.
+
+```java
+@RunWith(UnitilsJUnit4TestClassRunner.class) // (1)
+@DataSet // (2)
+public class DatabaseRepositoryTest {
+    
+    @Test
+    public void testFindById() throws Exception {
+        Repository repository = new DatabaseRepository();
+        Seller actualSeller = repository.findById("horichoi");
+        
+        assertPropertyLenientEquals("id", "seongmink", actualSeller); // (3)
+        assertPropertyLenientEquals("name", "김성민", actualSeller);
+        assertPropertyLenientEquals("email", "sminggo5@naver.com", actualSeller);
+    }
+}
+```
+
+(1) : Unitils 모듈의 서비스를 이용하기 위해 Test Listener를 지정했다. 
+
+(2) : 클래스 레벨에서 @DataSet 어노테이션이 사용되면 클래스이름.xml 파일을 데이터셋으로 인식한다. 따라서 이 예제에서는 DatabaseRepositoryTest.xml 파일을 읽어들이게 되어 있다. seller.xml 파일을 테스트 클래스가 있는 위치에 DatabaseRepositoryTest.xml라는 이름으로 복사해놓자.
+
+(3) : actualSeller.getId()가 "seongmink"인지 equals 비교를 한다.
+
+앞 소스에 비해 테스트 클래스가 좀 더 간결해졌다. 또한 데이터셋과 클래스 파일의 이름을 일치시킨다는 관례적인 규칙(conventional rule)으로 데이터셋을 관리하니까 일관성 측면에서도 더 나아졌다. 현재 DatabaseRepositoryTest.xml 파일의 모습은 다음과 같다.
+
+```xml
+<?xml version='1.0' encoding='UTF-8'?>
+<dataset>
+    <seller ID="seongmink" NAME="김성민" EMAIL="sminggo5@naver.com"/>
+    <seller ID="wooyoung" NAME="장우영" EMAIL="tmlu48@naver.com"/>
+    <seller ID="kidong" NAME="강기동" EMAIL="ki0050@naver.com"/>
+</dataset>
+```
+
+만일 클래스 이름과 데이터셋 파일 이름이 일치하지 않는다면 직접 지정해줄 수도 있고, 필요하다면 여러 개의 데이터셋을 지정할 수도 있다.
+
+```java
+@DataSet("seller.xml")
+@DataSet("seller.xml", "item.xml")
+```
+
+그리고 클래스 레벨로 데이터셋을 지정하는 것이 아니라, 메소드 레벨에서 데이터셋을 지정할 수도 있다.
+
+```java
+@Test
+@DataSet("DatabaseRepositoryTest.testAddNewSeller.xml")
+public void testAddNewSeller() throws Exception {
+    Seller newSeller = new Seller("akahwl", "이호원", "akahwl12@gmail.com");
+    Repository repository = new DatabaseRepository();
+...
+```
+
+하지만 메소드 레벨로 데이터셋을 지정하는 경우가 많아지면 데이터셋 관리가 또 하나의 부담이 될 수 있으니 유의해서 사용하자. 그리고 FlatXMLDataSet 외의 데이터셋 타입, 이를테면 XlsDataSet 타입이나 csv 파일 등을 이용하고 싶다면, DataSetFactory 인터페이스를 직접 구현한 다음, 설정파일에 DbUnitModule.DataSet.factory.default 항목으로 지정하면 된다.
+
+다음은 unitils-core 라이브러리 안에 unitils의 기본 설정파일이 들어 있는 모습과, 그 설정파일 안에 들어 있는 기본 데이터셋 타입이 지정된 모습이다. Unitils-default.properties 파일을 직접 수정할 일은 없지만 기본 세팅을 확인 할 때 사용한다.
+
+![](../images/6-2.jpg)
+
+##### 기본 설정파일 안에 들어 있는 기본 데이터셋 형식 지정 부분
+
+```properties
+# Default factory that is used to create a dataset object from a file for the @DataSet annotation
+DbUnitModule.DataSet.factory.default=org.unitils.dbunit.datasetfactory.impl.MultiSchemaXmlDataSetFactory
+```
+
+직접 만든 DataSetFactory의 구현체에 이 부분을 직접 적어놓을 순 없으니까, 앞서와 마찬가지로 클래스패스 내에 있는 unitils.properties 파일에 적어서 오버라이드되도록 만들면 된다.
