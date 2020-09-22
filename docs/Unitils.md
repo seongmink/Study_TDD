@@ -415,3 +415,122 @@ DbUnitModule.DataSet.factory.default=org.unitils.dbunit.datasetfactory.impl.Mult
 ```
 
 직접 만든 DataSetFactory의 구현체에 이 부분을 직접 적어놓을 순 없으니까, 앞서와 마찬가지로 클래스패스 내에 있는 unitils.properties 파일에 적어서 오버라이드되도록 만들면 된다.
+
+### 데이터셋 로드 전략
+
+데이터셋을 사용하는 동작(operation)에는 몇 가지 종류가 있다. @DataSet 어노테이션은 CLEAN_INSERT가 기본 동작이지만, 원할 경우 다른 동작을 지정할 수 있다. 두 가지 방식이 있는데, 설정파일(unitils. properties)에 지정하는 방법과 어노테이션 사용 시에 지정하는 방법이다.
+
+##### unitils.properties에 설정한 경우
+
+```properties
+DbUnitModule.DataSet.loadStrategy.default=org.unitils.dbunit.datasetloadstrategy.InsertLoadStrategy
+```
+
+##### 어노테이션으로 지정한 경우
+
+```java
+@DataSet(loadStrategy = InsertLoadStrategy.class)
+```
+
+Unitils에서 지원하는 데이터셋 지원 전략은 다음과 같다.(DbUnit의 모든 동작을 지원 하지는 않는다)
+
+| 전략명                  | 설명                                                         |
+| ----------------------- | ------------------------------------------------------------ |
+| CleanInsertLoadStrategy | 대상 테이블의 내용을 모두 지우고 데이터셋의 내용을 INSERT한다 |
+| InsertLoadStrategy      | 데이터셋을 INSERT만 한다.                                    |
+| RefreshLoadStrategy     | 데이터셋의 내용으로 DB를 갱신한다. 이미 존재하는 데이터는 UPDATE, 없는 데이터는 INSERT한다. |
+| UpdateLoadStrategy      | DB에 존재하는 데이터를 UPDATE한다.                           |
+
+### @TestDataSource, 테스트에 사용하는 데이터소스 접근하기
+
+Unitils는 설정파일에 지정된 DB 관련 값을 이용해 DataSource를 구성해 자동으로 DB 연결을 만들어 테스트를 진행하도록 설계되어 있다. 경우에 따라서는 DataSource에 직접 접근해야 할 필요가 있을 수 있다. 이럴 때 사용할 수 있는 방법은 두 가지로, @TestDataSource 어노테이션을 DataSource에 지정해서 Unitils가 자동으로 주입 (injection)하도록 만드는 방법과 DatabaseUnitils.getDataSource() 메소드를 이용하는 방법이다
+
+##### @TestDataSource 애노테이션을 이용해 Unitils가 직접 자신의 DataSource를 주입하도록 만든 모습
+
+```java
+public class ShopDAOTest extends UnitilsJUnit4 {
+    
+    @TestDataSource
+    private DataSource dataSource;
+    private ShopDAO dao;
+        
+    @Before
+    public void initialize () {
+        this.dao = new ShopDAO();
+        dao.setDataSource(dataSource);
+    }
+    ...
+}
+```
+
+##### DatabaseUnitils.getDataSource( )를 이용해 DataSource를 얻어오는 모습
+
+```java
+dao.setDataSource(DatabaseUnitils.getDataSource());
+```
+
+### @ExpectedDataSet, 예상 데이터셋을 이용한 테스트 메소드 레벨의 결과 비교
+
+때로는 결과값을 비교해야 할 때도 있다. DbUnit에서는 예상값을 마찬가지로 데이터셋으로 만들어서 상태를 비교했다. Unitils에서는 이럴 때 사용할 수 있도록 @ExpectedDataSet이라는 어노테이션을 제공한다. 다음은 DbUnit 설명 시에 사용했던 예제와 동일한 예제다. 새로운 판매자를 입력한 다음, 정상적으로 입력 됐는지 확인하는 테스트다.
+
+```java
+@Test
+public void testAddNewSeller() throws Exception {
+    Seller newSeller = new Seller("hssm","이동욱","scala@hssm.kr");
+    Repository repository = new DatabaseRepository();
+    repository.add(newSeller);
+    
+    ITable actualTable = connection.createQueryTable("SELLER", "select * from seller");
+    IDataSet expectedDataSet = new FlatXmlDataSetBuilder().build(new File("expected_seller.xml"));
+    ITable expectedTable = expectedDataSet.getTable("seller");
+    
+    Assertion.assertEquals(expectedTable, actualTable);
+}
+```
+
+판매자를 추가한 다음 DB에서 데이터셋을 추출해내고, 그걸 미리 만들어놓았던 expected_seller.xml의 테이블과 비교하고 있다. 위 코드를 @ExpectedDataSet 어노테이션을 이용해 고치면 다음과 같아진다.
+
+```java
+@Test
+@ExpectedDataSet("expected_seller.xml")
+public void testAddNewSeller() throws Exception {
+    Seller newSeller = new Seller("akahwl","이호원","akahwl12@gmail.com");
+    Repository repository = new DatabaseRepository();
+    repository.add(newSeller);
+}
+```
+
+테스트 케이스가 훨씬 더 간결해졌다. 만일 직접 예상 데이터셋을 지정하지 않는다면, Unitils는 기본적으로 '클래스이름.메소드이름-result.xml'이라는 데이터셋 파일을 찾는다. 위 예제의 경우라면 RepositoryTest.testAddNewSeller-result.xml 파일을 예상 데이터셋으로 찾았을 것이다. 단, 주의할 점은 앞에서도 이야기했지만, 메소드 레벨의 데이터셋을 사용하면 자칫 데이터셋 파일이 많아지는 불우한 상황이 벌어질 수 있음을 유의하자
+
+### @Transactional, 트랜잭션 처리
+
+DB 관련 기능을 테스트할 때, 트랜잭션 처리가 필요한 경우가 많다.
+
+- 업무 로직상 트랜잭션 기능 자체를 테스트해야 하는 경우
+- 테스트 시 변경된 데이터가 테스트 종료 후에도 그 상태로 남게 하지 않으려고 롤백을 사용하는 경우
+- SELECT FOR UPDATE처럼 트랜잭션 처리를 해야 제대로 동작하는 기능을 사용 해야 할 경우
+- 즉시 자동커밋(immediate auto-commit)으로 운영하기 어려운 제품을 사용하는 경우. 대표적인 예로 하이버네이트나 JPA, TOP-LINK 등을 사용할 때
+
+이럴 때는 트랜잭션 기능을 사용해야 하는데, Unitils에서 마찬가지로 쉽게 처리할 수 있는 기능을 제공한다.
+
+기본적으로 Unitils의 DB 관련 기능을 이용해 테스트를 수행하게 되면, 모든 테스트는 트랜잭션이 발생하는 상태로 동작하고, 테스트 마지막에 커밋을 발생시킨다. 따라서 자신이 사용하는 DB가 트랜잭션을 지원하는지 살펴보고, 그리고 자신의 테스트 코드가 트랜잭션으로 동작해도 무방한지 고려해봐야 한다. 그 다음엔 어떻게 적용할지를 정해야 한다. 설정파일에 지정하는 방법과 어노테이션을 이용해 클래스 레벨로 지정하는 방법 두 가지가 있다. 지정 가능한 상태는 commit, rollback, disabled 세 가지다. 앞선 예제에서는 트랜잭션 처리를 하지 않게 하려고, 즉 자동커밋 상태를 만들기 위해 unitils의 트랜잭션 기능을 disabled로 만들었다. 다음은 테스트 케이스를 수행한 다음 롤백처리하도록 만드는 예다. 둘 중 하나만 사용하자.
+
+##### unitiils.properties 파일에 설정한 경우
+
+```properties
+DatabaseModule.Transactional.value.default=rollback
+```
+
+##### @Transactional 애노테이션으로 지정한 경우
+
+```java
+@Transactional(TransactionMode.ROLLBACK)
+public class ShopDaoTest extends UnitilsJUnit4 {
+}
+```
+
+참고로 Derby DB의 임베디드 모드에서는 트랜잭션 처리가 정상적으로 동작하지 않는다.
+
+특이한 건, Unitils는 트랜잭션 관련 기능을 구현하는 데 스프링 프레임워크의 트랜잭션 관리 기능을 전적으로 차용해서 사용했다는 점이다. 의존 라이브러리를 열어보면 spring 라이브러리들이 들어 있는 것을 확인할 수 있다.
+
+데이터베이스 관련 지원 기능 중 재밌는 것이 하나 있는데, DBMaintainer라는 기능이다.
