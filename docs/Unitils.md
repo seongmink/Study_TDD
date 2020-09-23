@@ -534,3 +534,146 @@ public class ShopDaoTest extends UnitilsJUnit4 {
 특이한 건, Unitils는 트랜잭션 관련 기능을 구현하는 데 스프링 프레임워크의 트랜잭션 관리 기능을 전적으로 차용해서 사용했다는 점이다. 의존 라이브러리를 열어보면 spring 라이브러리들이 들어 있는 것을 확인할 수 있다.
 
 데이터베이스 관련 지원 기능 중 재밌는 것이 하나 있는데, DBMaintainer라는 기능이다.
+
+## DBMaintainer: DB를 자동으로 유지보수해주는 DB 유지보수 관리자
+
+Unitils의 DBMaintainer는 개발자 각자의 DB 스키마를 SQL 스크립트를 이용해 자동으로 유지시켜 주는 기능이다. 기본적으로 동작하는 방식은 다음과 같다.
+
+- 프로젝트 내에 폴더를 하나 만들어서 애플리케이션에서 필요한 DB스크립트를 넣어놓는다.
+
+- 이때 DB스크립트는 숫자 형식의 버전넘버를 _(언더바)로 구분지어 갖도록 이름짓는다.
+
+  예: 001_DROP_ALL_TABLES.sql, 002_CREATE_TABLES.sql ...
+
+- Unitils의 DataSource를 이용하는 테스트 클래스를 실행한다.
+
+- DBMaintainer는 지정된 스크립트 폴더를 모니터링해서 변경된 내용이 있으면 반영한다.
+
+DB 구조를 SQL 스크립트로 관리하고, 추가내용을 덧붙여 반영하도록 만들 때 매우 유용하다. 스크립트 폴더에 변경분만 넣어주면 끝나기 때문이다. 모니터링 후 동작하는 방식은 두 가지인데, 만일 새로운 스크립트가 추가된 경우라면 해당 스크립트만 실행한다. 기존 스크립트가 변경됐다면, 스키마를 전체 리셋하고 다시 처음부터 스크립트를 실행한다(해당 유저의 스키마가 리셋된다는 점을 유의하자). 참고로 이때, 번호가 매겨지지 않은 스크립트는 가장 나중에 실행된다. 필요에 따라 스크립트 폴더들도 번 호를 붙여 순차적으로 실행되도록 만들 수 있다.
+
+```
+dbscripts/ 01_production/ 001_initial.sql
+ 						  002_auditing_updates.sql
+ 		   02_latest_dev/ 001_add_user_table.sql
+						  002_rename_product_id.sql
+```
+
+### DBMaintainer 기능 활성화시키기
+
+DBMaintainer 기능은 기본값으로는 false 상태로 되어 있기 때문에 해당 기능을 사용하려면 설정파일에 다시 지정해서 true로 변경해줘야 한다.
+
+```properties
+updateDataBaseSchema.enabled=true
+```
+
+적용 범위는 Unitils의 DataSource를 사용하는 모든 테스트 클래스가 된다. 그리고 스크립트 파일들이 존재하는 폴더를 지정해준다.
+
+```properties
+dbMaintainer.script.locations=src/dbscripts
+```
+
+![](../images/6-3.jpg)
+
+##### DBMaintainer를 위해 unitils.properties에 추가된 내용
+
+```properties
+dataSetStructureGenerator.xsd.dirName=xsd
+
+updateDataBaseSchema.enabled=true
+dbMaintainer.script.locations=src/dbscripts
+dbMaintainer.autoCreateExecutedScriptsTable=true
+```
+
+dbMaintainer.autoCreateExecutedScriptsTable은 DBMaintainer가 스크립트들을 버전관리하기 위해 사용하는 테이블이다. 최초에는 없기 때문에 자동으로 만들도록 지정해줬다. 프로젝트 홈 아래에 xsd라는 폴더를 만들어서 dataSetStructureGenerator 위치로 지정해줬다. 해당 폴더에 DB 스키마의 구조를 만들어준다.
+
+DBMaintainer는 단순히 스키마의 데이터를 업데이트하는 것과는 좀 다르다. 추가적으로 다음과 같은 기능을 함께 제공한다
+
+- 모든 참조키와 Not Null 제약조건을 비활성화(disable)시키기 때문에 INSERT 스크립트 실행을 편리하게 만들어준다.
+- 시퀀스(sequence) 타입들을 높은 숫자로 업데이트시켜 주기 때문에, 테스트 수행시에 넣게 되는 데이터들의 기본키(primary key) 값을 고정값으로 지정해도 충돌이 나지 않도록 도와준다.(시퀀스가 PK 컬럼으로 쓰일 때)
+- 데이터베이스의 구조를 XSD(XML Schema Definition) 파일로 만들어준다. 해당 파일은 이클립스에서 GUI 형태로 볼 수 있다.
+
+![](../images/6-4.jpg)
+
+## 기타 지원 모듈들
+
+### 하이버네이트 지원 모듈
+
+#### @HibernateSessionFactory
+
+@HibernateSessionFactory 어노테이션으로 SessionFactory를 쉽게 얻을 수 있게 도 와준다.
+
+```java
+@RunWith(UnitilsJUnit4TestClassRunner.class)
+public class ShopDaoTest {
+
+    @HibernateSessionFactory({"hibernate.cfg.xml", "mapped-classes.cfg.xml"})
+    private SessionFactory sessionFactory;
+    
+    ...
+}
+```
+
+#### 하이버네이트 매핑 테스트
+
+실제 데이터베이스의 구조와 하이버네이트 매핑 파일 내의 구조가 일치하는지 테스트 해준다.
+
+```java
+@HibernateSessionFactory("hibernate.cfg.xml")
+public class HibernateMappingTest extends UnitilsJUnit4 {
+
+    @Test
+    public void testMappingToDatabase() {
+        HibernateUnitils.assertMappingWithDatabaseConsistent();
+	}
+}
+```
+
+### 스프링 지원 모듈
+
+Unitils는 스프링 프레임워크의 애플리케이션 컨텍스트 설정을 읽어오는 부분과 스프링 빈(beans)을 주입시켜 주는 부분을 편리하게 쓸 수 있도록 도와준다.
+
+#### @SpringApplicationContext, 스프링 애플리케이션 컨텍스트 설정 지원
+
+```java
+@RunWith(UnitilsJUnit4TestClassRunner.class)
+public class UnitilsMusicPlayerTest {
+    
+    @SpringApplicationContext("/context-musicplayer.xml")
+    private ApplicationContext context;
+    
+    @Test
+    public void testGetFileName() throws Exception {
+		MusicPlayer player = (MusicPlayer)context.getBean("musicPlayer");
+        assertEquals("Belong to me.mp3", player.getFileName());
+    }
+    ...
+}
+```
+
+#### 스프링 빈 주입
+
+이름지정, 이름일치, 타입일치, 이렇게 세 개의 어노테이션을 지원해준다.
+
+```java
+@SpringBean("userMusicPlayer")
+private MusicPlayer player;
+
+@SpringBeanByName
+private MusicPlayer player;
+
+@SpringBeanByType
+private MusicPlayer player;
+```
+
+만일 @ContextConfiguration 어노테이션과 @Autowired를 즐겨쓰는 입장이라면 별 장점이 되진 않을 것이다
+
+### Mock 지원 모듈
+
+Unitils는 예전에는 easymock을 지원해주는 수준이었는데, 2.0 버전부터 자체 Mock 프레임워크를 제공하고 있다.
+
+> **프레임워크 vs 라이브러리**
+>
+> '프레임워크'와 '라이브러리'라는 용어를 계속 쓰고 있는데, 그 둘의 차이점이 무엇인지 잠깐 생각해보자. 둘 다 재사용을 목적으로 하고 있으며, 소프트웨어 개발에서 중요한 부분을 차지한다는 점에선 공통점을 갖는다. 그렇다면 소프트웨어의 세계에선 과연 무엇을 프레임워크라고 부르고, 어떤 걸 라이브러리라고 부르는걸까?
+>
+> 프레임워크는 복잡한 문제를 해결하기 위해 사용되는 기본 개념적인 구조로, 보통 툴이나 컴포넌트들의 집합 체를 의미한다. 라이브러리는 소프트웨어를 개발하기 위해 사용되는 클래스나 서브루틴들의 집합체다. 느낌으로도 프레임워크의 범위가 더 크다는 걸 알 수 있다. 하지만 정의만으로는 차이가 뚜렷히 잘 안 느껴지니까, 차이점 위주로 이야기를 다시 해보자. 프레임워크는 층(layer)을 갖고 라이브러리는 API만을 갖는다. 프레임워크는 층을 따른 데이터의 흐름(flow)이 있고, 라이브러리는 값의 IN/OUT에 가깝다. 따라서, 어느 사이트를 갔더니 구조를 층으로 나누어 설명하는 그림이 있으면 프레임워크라고 생각하자. 또한 경우에 따라서는 '개발자가 직접 API를 호출하느냐?' 아니면 '개발자가 만든 코드를 시스템이 호출하느냐'에 따라 구분하기도 한다. 이 경우 전자는 라이브러리, 후자는 프레임워크에 해당한다. 대부분은 곧잘 혼용해서 사용하며, 둘을 단순히 규모로 나누는 경우도 많다.
+
