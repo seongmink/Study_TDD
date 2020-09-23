@@ -445,7 +445,7 @@ Unitils에서 지원하는 데이터셋 지원 전략은 다음과 같다.(DbUni
 
 Unitils는 설정파일에 지정된 DB 관련 값을 이용해 DataSource를 구성해 자동으로 DB 연결을 만들어 테스트를 진행하도록 설계되어 있다. 경우에 따라서는 DataSource에 직접 접근해야 할 필요가 있을 수 있다. 이럴 때 사용할 수 있는 방법은 두 가지로, @TestDataSource 어노테이션을 DataSource에 지정해서 Unitils가 자동으로 주입 (injection)하도록 만드는 방법과 DatabaseUnitils.getDataSource() 메소드를 이용하는 방법이다
 
-##### @TestDataSource 애노테이션을 이용해 Unitils가 직접 자신의 DataSource를 주입하도록 만든 모습
+##### @TestDataSource 어노테이션을 이용해 Unitils가 직접 자신의 DataSource를 주입하도록 만든 모습
 
 ```java
 public class ShopDAOTest extends UnitilsJUnit4 {
@@ -521,7 +521,7 @@ DB 관련 기능을 테스트할 때, 트랜잭션 처리가 필요한 경우가
 DatabaseModule.Transactional.value.default=rollback
 ```
 
-##### @Transactional 애노테이션으로 지정한 경우
+##### @Transactional 어노테이션으로 지정한 경우
 
 ```java
 @Transactional(TransactionMode.ROLLBACK)

@@ -8,7 +8,7 @@
 - [Mock을 이용한 TDD](./docs/Mock%EC%9D%84%20%EC%9D%B4%EC%9A%A9%ED%95%9C%20TDD.md)
 - [데이터베이스 테스트: DbUnit](./docs/DbUnit.md)
 - [단위 테스트 지원 라이브러리: Unitils](./docs/Unitils.md)
-- 개발 영역에 따른 TDD 작성 패턴
+- [개발 영역에 따른 TDD 작성 패턴](./docs/TDD%20Patterns.md)
 - TDD에 대한 다양한 시각
 - 자주 접하게 되는 질문들, FAQ
 - 실습 예제
