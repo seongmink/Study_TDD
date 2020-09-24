@@ -4,7 +4,7 @@
 
 ## Unitils를 사용하기 위한 환경 준비
 
-실제 예제를 살펴보기 전에, Unitils를 사용할 수 있는 환경을 먼저 구축해보자. Unitils 를 사용하기 위해 Unitils 라이브러리를 사이트(https://mvnrepository.com/artifact/org.unitils/unitils-core)에서 내려받는다. 다음 실습을 따라 하려면, unitils-core 폴더와 unitils-core/lib 폴더 안의 라이브러리를 클래스패스에 포함시켜 줘야 한다.
+실제 예제를 살펴보기 전에, Unitils를 사용할 수 있는 환경을 먼저 구축해보자. Unitils 를 사용하기 위해 Unitils 라이브러리를 사이트에서 내려받는다. 다음 실습을 따라 하려면, unitils-core 폴더와 unitils-core/lib 폴더 안의 라이브러리를 클래스패스에 포함시켜 줘야 한다.
 
 그리고 소스에서는 JUnit 4와 마찬가지로 static import를 주로 사용한다. 이를테면 다음과 같은 식으로 말이다.
 
@@ -12,13 +12,13 @@
 import static org.unitils.reflectionassert.ReflectionAssert.*;
 ```
 
-JUnit 4의 static 메소드들을 자동완성 기능으로 사용하기 위해 favorite으로 등록하는 방법을 2장에 정리해놓았다. Unitils의 static 메소드들도 같은식으로 등록해놓으면 편리하게 사용할 수 있다.
+JUnit 4의 static 메소드들을 자동완성 기능으로 사용하기 위해 favorite으로 등록하는 방법을 [2장](./JUnit%EA%B3%BC%20Hamcrest.md)에 정리해놓았다. Unitils의 static 메소드들도 같은식으로 등록해놓으면 편리하게 사용할 수 있다.
 
 ## Unitils의 단위 테스트 지원 기능들
 
 ### 객체 동치성 비교
 
-TDD를 위해 테스트 케이스를 작성하다 보면, 객체끼리 동치성 비교를 해야 하는 경 우가 흔히 발생한다. 그런데, 이때 assertEquals만으로는 원하는 답이 나오지 않는 경우가 많다. 다음은 Book이라는 클래스와 그 클래스를 기반으로 만들어진 두 객체에 대한 동치성 비교 문장이다.
+TDD를 위해 테스트 케이스를 작성하다 보면, 객체끼리 동치성 비교를 해야 하는 경우가 흔히 발생한다. 그런데, 이때 assertEquals만으로는 원하는 답이 나오지 않는 경우가 많다. 다음은 Book이라는 클래스와 그 클래스를 기반으로 만들어진 두 객체에 대한 동치성 비교 문장이다.
 
 ##### Book 클래스
 
@@ -42,7 +42,7 @@ public class Book {
 ```java
 @Test
 public void testBook() throws Exception {
-	Book aBook = new Book("사람은 무엇으로 사는가?","톨스토이", 9000);
+    Book aBook = new Book("사람은 무엇으로 사는가?","톨스토이", 9000);
     Book otherBook = new Book("사람은 무엇으로 사는가?","톨스토이", 9000);
     
 	assertEquals(aBook, otherBook);
@@ -93,6 +93,7 @@ public class BookTest {
         assertReflectionEquals("Book 객체 필드 비교", aBook, otherBook);
     }
     ...
+}
 ```
 
 리플렉션 단정문을 사용하면 테스트가 깔끔하게 성공한다.
@@ -149,10 +150,8 @@ assertReflectionEquals(expectedItem, actualItem, IGNORE_DEFAULTS);
 객체값을 비교할 때 종종 테스트를 만들기가 어려운 경우는, 로그성 날짜가 들어가는 필드값이 쓰일 때다. 이를테면 주문일시, 등록일자, 접수시간 등의 필드는 실제 해당 값이 생성되는 시점의 '시스템 타임'이 값으로 채워지는 경우가 많다. 그런데 테스트 케이스를 만들어서 수행하는 경우에는 테스트할 때마다 시스템 시간이 달라지기 때문에 예상값을 특정해놓기가 어렵다. 그래서 이런저런 편법을 사용해 날짜 비교를 무시하도록 유도하곤 하는데, Unitils에서는 해당 부분을 LENIENT_DATES라는 옵션으로 해결해주고 있다.
 
 ```java
-Item expectedItem = new Item("IKH-001", null, 24000,
-new Date(System.currentTimeMillis()+100));
-Item actualItem = new Item("IKH-001", null, 24000,
-new Date(System.currentTimeMillis()));
+Item expectedItem = new Item("IKH-001", null, 24000, new Date(System.currentTimeMillis()+100));
+Item actualItem = new Item("IKH-001", null, 24000, new Date(System.currentTimeMillis()));
 assertReflectionEquals(expectedItem, actualItem, LENIENT_DATES);
 ```
 
@@ -168,8 +167,7 @@ List<Integer> bag = Arrays.asList(100, 200, 300);
 assertLenientEquals(Arrays.asList(300, 200, 100), bag);
 
 // 배열의 순서가 다른 경우
-assertLenientEquals(new String[]{"a", "B", "c"}, new String[]{"B",
-"c","a"});
+assertLenientEquals(new String[]{"a", "B", "c"}, new String[]{"B","c","a"});
 
 // 필드값이 타입 기본값일 경우 비교에서 제외
 Item expectedItem = new Item("IKH-001", null, 24000);
@@ -186,8 +184,9 @@ assertLenientEquals(expectedItem, actualItem);
 ```java
 @Test
 public void testLoadPlayerTest() throws Exception {
-	// 저장소에서 주장 캐릭터의 정보를 불러온다.
+    // 저장소에서 주장 캐릭터의 정보를 불러온다.
     Player player = VolleyballTeamRepository.getCaptain();
+    
     assertEquals("Ku Min-jung", player.getName());
 }
 ```
@@ -212,7 +211,7 @@ public class Player {
     
     public int getAbilityPoint(){ // 나이 30이 넘으면 능력이 떨어진다..
         return (30 - this.age) + experienceYear;
-	}
+    }
 }
 ```
 
@@ -233,6 +232,7 @@ assertPropertyLenientEquals(속성 이름, 예상되는 속성 값, 실제 객�
 @Test
 public void testPlayerPropertyTest() throws Exception {
     Player player = VolleyballTeamRepository.getCaptain();
+    
     assertPropertyLenientEquals("age", 31, player);
     assertPropertyLenientEquals("experienceYear", 15, player);
 }
@@ -476,7 +476,7 @@ dao.setDataSource(DatabaseUnitils.getDataSource());
 ```java
 @Test
 public void testAddNewSeller() throws Exception {
-    Seller newSeller = new Seller("hssm","이동욱","scala@hssm.kr");
+    Seller newSeller = new Seller("akahwl","이호원","akahwl12@gmail.com");
     Repository repository = new DatabaseRepository();
     repository.add(newSeller);
     
@@ -553,9 +553,9 @@ DB 구조를 SQL 스크립트로 관리하고, 추가내용을 덧붙여 반영�
 
 ```
 dbscripts/ 01_production/ 001_initial.sql
- 						  002_auditing_updates.sql
- 		   02_latest_dev/ 001_add_user_table.sql
-						  002_rename_product_id.sql
+                          002_auditing_updates.sql                        
+           02_latest_dev/ 001_add_user_table.sql
+                          002_rename_product_id.sql
 ```
 
 ### DBMaintainer 기능 활성화시키기
@@ -665,7 +665,7 @@ private MusicPlayer player;
 private MusicPlayer player;
 ```
 
-만일 @ContextConfiguration 어노테이션과 @Autowired를 즐겨쓰는 입장이라면 별 장점이 되진 않을 것이다
+만일 @ContextConfiguration 어노테이션과 @Autowired를 즐겨쓰는 입장이라면 별 장점이 되진 않을 것이다.
 
 ### Mock 지원 모듈
 
