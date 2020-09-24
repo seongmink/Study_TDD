@@ -101,7 +101,7 @@ public class DatabaseRepositoryTest {
             IDataSet dataSet = new FlatXmlDataSetBuilder().build(new File("seller.xml")); // (3)
             DatabaseOperation.CLEAN_INSERT.execute(databaseTester.getConnection(), dataSet); // (4)
         } finally {
-        databaseTester.getConnection().close();
+            databaseTester.getConnection().close();
         }
     }
 }
@@ -151,17 +151,16 @@ public class DatabaseRepository implements Repository {
         try {
         	String query = "select ID, name, email" 
                 + " from seller where ID = ?"; // (1)
-        stmt = conn.prepareStatement(query);
-        stmt.setString(1, id);
-        rs = stmt.executeQuery();
-        if ( !rs.next() ){
-        	throw new SQLException("No Data Found!"); // (2)
-        }
-        seller = new Seller(rs.getString(1), rs.getString(2),
-        rs.getString(3)); // (3)
-        rs.close();
-        stmt.close();
-        conn.close();
+            stmt = conn.prepareStatement(query);
+            stmt.setString(1, id);
+            rs = stmt.executeQuery();
+            if (!rs.next()){
+                throw new SQLException("No Data Found!"); // (2)
+            }
+            seller = new Seller(rs.getString(1), rs.getString(2), rs.getString(3)); // (3)
+            rs.close();
+            stmt.close();
+            conn.close();
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -196,7 +195,7 @@ public class DatabaseRepository implements Repository {
 public void testAddNewSeller() throws Exception {
     Seller newSeller = new Seller("akahwl","이호원","akahwl12@gmail.com");
     Repository repository = new DatabaseRepository();
-	repository.add(newSeller); // 새로운 판매자 추가
+    repository.add(newSeller); // 새로운 판매자 추가
     Seller sellerFromRepository = repository.findById("akahwl");
     
     assertEquals(newSeller.getId(),sellerFromRepository.getId());
@@ -228,7 +227,7 @@ public void testAddNewSeller() throws Exception {
     IDataSet currentDBdataSet = databaseTester.getConnection().createDataSet(); // (1)
     ITable actualTable = currentDBdataSet.getTable("seller"); // (2)
     IDataSet expectedDataSet = new FlatXmlDataSetBuilder().build(new File("expected_seller.xml")); // (3)
-	ITable expectedTable = expectedDataSet.getTable("seller"); // (4)
+    ITable expectedTable = expectedDataSet.getTable("seller"); // (4)
     
     Assertion.assertEquals(expectedTable, actualTable); // (5)
 }
@@ -268,13 +267,11 @@ public class Assertion {
  JUnit에서는 제공하지 않는 ITable 타입과 IDataSet 타입의 비교를 지원해준다. 만일 데이터셋을 직접 비교하고 싶으면 다음과 같이 작성한다.
 
 ```java
-…
-	IDataSet currentDBdataSet 
-	    = databaseTester.getConnection().createDataSet(new String[]{"seller"});
-	IDataSet expectedDataSet 
-        = new FlatXmlDataSetBuilder().build(new File("expected_seller.xml"));
+...
+	IDataSet currentDBdataSet = databaseTester.getConnection().createDataSet(new String[]{"seller"});
+	IDataSet expectedDataSet = new FlatXmlDataSetBuilder().build(new File("expected_seller.xml"));
 	Assertion.assertEquals(expectedDataSet, currentDBdataSet);
-…
+...
 ```
 
 > ##### 주의
