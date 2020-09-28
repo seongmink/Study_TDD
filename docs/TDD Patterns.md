@@ -475,3 +475,67 @@ MVC 모델에서 컨트롤러를 테스트하는 가장 간단한 방법은 뷰�
 ![](../images/7-2.jpg)
 
 흔히 MVC 아키텍처에서는 서블릿이 컨트롤러의 역할을 맡게 된다. 서블릿을 컨트롤러 역할로 사용해서 테스트 케이스를 작성해보자.
+
+- #### 컨트롤러에 대한 테스트 케이스 작성
+
+  화면에서 사원번호를 입력하면, 해당 사원의 정보를 출력해주는 상황을 가정해보자. 
+
+  ![](../images/7-3.jpg)
+
+  컨트롤러에 해당하는 서블릿은 EmployeeSearchServlet이라는 이름으로 만들 예정이다. TDD 방식이 의례 그렇듯, 시나리오에 맞춰서 ControllerTest를 작성해보자. 단, 이 때 Request 객체와 Response 객체를 자유롭게 다루기 위해서 스프링 프레임워크의 테스트 라이브러리를 이용했다. Request나 Response는 서블릿 표준 스펙상 개발자가 마음대로 내부 상태를 변경할 수 없는데, 스프링 프레임워크의 테스트 라이브러리는 이 부분을 극복할 수 있게 도와준다. 여기서는 Request나 Response의 Mock 구현체를 이용하기 위해 필요한 라이브러리만 클래스패스에 넣어 간략하게 사용했다. 
+
+  ```java
+  package test;
+  
+  import static org.junit.Assert.assertEquals;
+  import main.EmployeeSearchServlet;
+  import org.junit.Test;
+  import org.springframework.mock.web.*;
+  
+  public class EmployeeSearchServletTest {
+      @Test
+      public void testSearchByEmpid() throws Exception {
+          MockHttpServletRequest request = new MockHttpServletRequest(); // (1)
+          MockHttpServletResponse response = new MockHttpServletResponse(); // (2)
+          request.addParameter("empid", "5874"); // (3)
+          EmployeeSearchServlet searchServlet = new EmployeeSearchServlet(); // (4)
+          searchServlet.service(request, response); // (5)
+          Employee employee = (Employee)request.getAttribute("employee"); // (6)
+          assertEquals("박성철", employee.getName()); // (7)
+          assertEquals("5874", employee.getEmpid());
+          assertEquals("fupfin", employee.getId());
+          assertEquals("회장", employee.getPosition());
+          
+          assertEquals("/SearchResult.jsp", response.getForwardedUrl()); // (8)
+      }
+  }
+  ```
+
+  (1) : 스프링 프레임워크의 테스트 라이브러리를 이용해 Mock Request를 생성했다.
+
+  (2) : 마찬가지로 Mock Response를 생성했다.
+
+  (3) : Request에 empid라는 파라미터 이름으로 5874라는 사번이 담겨왔다고 가정한다.
+
+  (4) : 컨트롤러에 해당하는 EmployeeSearchServlet을 생성한다.
+
+  (5) : EmployeeSearchServlet 컨트롤러를 동작시킨다.
+
+  (6) : MVC 모델에서 컨트롤러가 해야 하는 역할 중 하나는 모델에서 수행된 결과를 Request에 담는 것이다. 정상적으로 컨트롤러가 실행돼서 Request에 예상한 값이 담겨 있는지 확인해야 한다. 예제에서는 employee라는 이름의 Employee 객체를 Request에서 꺼냈다. DTO라고 보면 된다.
+
+  (7) : 단정문을 이용해 값을 확인한다. 
+
+  (8) : 응답 페이지 설정이 예상과 일치하는지 확인한다. 마찬가지로, MVC 모델에서 컨트롤러가 해야 하는 역할이다.
+
+  보면 알겠지만 Request, Response 객체를 사용한다는 것 말고는 일반적인 애플리케이션의 테스트 케이스 작성과 별반 다르지 않다. 이제 EmployeeSearchServlet을 구현하면 된다.
+
+  ![](../images/7-4.jpg)
+
+  > ##### 실습에 필요한 라이브러리 내려받기(시간이 많이 흘렀기 때문에, 버전은 신경쓰지 말자)
+  >
+  > ![](../images/7-5.jpg)
+  >
+  > 실습에 필요한 파일은 각각 찾아도 되지만, 스프링 공식 사이트의 다운로드 사이트(http://www.springsource.com/download/community)에서 의존성 라이브러리가 포함되어 있는 버전 (spring-framework-3.0.1.RELEASE-A-dependencies.zip)을 내려받으면 실습에 필요한 라이브러리가 안에 다 들어 있다. 다만 이 경우, com.springsource나 프로젝트 접두어가 붙어서 이름은 조금씩 다를 수 있다. commons-logging-1.1.jar 대신에 com.springsource.org.apache. commons.loggings-1.1.1.jar 같은 식으로 말이다.
+
+
+
