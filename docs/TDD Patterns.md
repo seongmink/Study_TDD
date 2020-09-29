@@ -537,5 +537,104 @@ MVC 모델에서 컨트롤러를 테스트하는 가장 간단한 방법은 뷰�
   >
   > 실습에 필요한 파일은 각각 찾아도 되지만, 스프링 공식 사이트의 다운로드 사이트(http://www.springsource.com/download/community)에서 의존성 라이브러리가 포함되어 있는 버전 (spring-framework-3.0.1.RELEASE-A-dependencies.zip)을 내려받으면 실습에 필요한 라이브러리가 안에 다 들어 있다. 다만 이 경우, com.springsource나 프로젝트 접두어가 붙어서 이름은 조금씩 다를 수 있다. commons-logging-1.1.jar 대신에 com.springsource.org.apache. commons.loggings-1.1.1.jar 같은 식으로 말이다.
 
+  ![](../images/7-6.jpg)
+
+  다음은 위 테스트 케이스를 기반으로 작성한 EmployeeSearchServlet이다. 하나의 예일 뿐이라는 걸 감안 하고 살펴보자.
+
+  ```java
+  import javax.servlet.*;
+  import javax.servlet.http.*;
+  
+  public class EmployeeSearchServlet extends HttpServlet {
+      @Override
+      protected void service(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+          SearchBiz searchBiz = new SearchBiz();
+          Employee emplyee = searchBiz.getEmployeeByEmpid(request.getParameter("empid"));
+  
+          request.setAttribute("employee", emplyee);
+          RequestDispatcher dispatcher = request.getRequestDispatcher("/SearchResult.jsp");
+          dispatcher.forward(request, response);
+      }
+  }
+  ```
+
+  한 가지 트집을 잡자면, 컨트롤러에 해당하는 위의 EmployeeSearchServlet은 SearchBiz와 강하게 결합되어 있다. 좀 더 약하게 결합시키기 위해서는 인터페이스를 사용하거나 객체를 주입할 수 있는 창구, set 메소드를 만드는 것도 하나의 방법이다. 다음 코드는 모델을 따로 주입할 수 있도록 set 메소드를 추가한 모습이다.
+
+  ```java
+  public class EmployeeSearchServlet extends HttpServlet {
+      private SearchBiz searchBiz;
+      @Override
+      protected void service(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+          Employee emplyee = this.searchBiz.getEmployeeByEmpid(
+              request.getParameter("empid"));
+          request.setAttribute("employee", emplyee);
+          RequestDispatcher dispatcher = request.getRequestDispatcher("/SearchResult.jsp");
+          dispatcher.forward(request, response);
+      }
+      
+      public void setModel(SearchBiz biz) {
+          this.searchBiz = biz;
+      }
+  }
+  ```
+
+- #### 의존성을 줄인 컨트롤러 테스트 케이스 작성
+
+  좀 더 나아가서, 완전히 컨트롤러만 테스트하고자 한다면, Mock을 이용해 모델까지도 Mock으로 전환할 수 있다.
+
+  ![](../images/7-7.jpg)
+
+  MockModel을 이용한 테스트 케이스를 작성해보자. 이왕 Mock을 이용하는 김에 앞에서 배웠던 Mockito와 Unitils를 이용해보자. MockModel을 만드는 건 Mockito에게 맡기고, 객체에 대한 동치비교는 Unitils의 assertLenientEquals를 이용한다.
+
+  ```java
+  package test;
+  
+  import static org.junit.Assert.assertEquals;
+  import static org.mockito.Mockito.*;
+  import static org.unitils.reflectionassert.ReflectionAssert.*;
+  import main.*;
+  import org.junit.Test;
+  import org.springframework.mock.web.*;
+  public class EmployeeSearchServletTest {
+      @Test
+      public void testSearchByEmpid() throws Exception {
+          MockHttpServletRequest request = new MockHttpServletRequest(); 
+          MockHttpServletResponse response = new MockHttpServletResponse();
+          
+          request.addParameter("empid", "5874");
+          
+          SearchBiz biz = mock(SearchBiz.class); // (1)
+          Employee expectedEmployee = new Employee("박성철", "5874", "fupfin", "회장"); // (2)
+          when(biz.getEmployeeByEmpid(anyString())).thenReturn(expectedEmployee); // (3)
+          EmployeeSearchServlet searchServlet = new EmployeeSearchServlet();
+          searchServlet.setModel(biz); // (4)
+          searchServlet.service(request, response);
+  
+          Employee employee = (Employee)request.getAttribute("employee");
+          
+          assertLenientEquals(expectedEmployee, employee); // (5)
+          assertEquals("/SearchResult.jsp", response. getForwardedUrl());
+      }
+  }
+  ```
+
+  (1) : Mockito를 이용해 Mock 객체를 만든다. 현재는 SearchBiz가 인터페이스가 아닌 일반 클래스다. 만일 모델에 대한 설계가 좀 더 잘 이뤄졌다면, 아마 인터페이스가 됐을 것이다.
+
+  (2) : 검색 결과로 돌려줄 예상값에 해당하는 DTO를 미리 작성했다.
+
+  (3) : Mockito로 Stub을 만들었다. getEmployeeByEmpid의 파라미터로는 어떤 문자열 이 되어도 무방하고, 그러면 expectedEmployee를 돌려준다.
+
+  (4) : 의존성 모듈인 Biz 모델을 주입한다.
+
+  (5) : 동치비교를 위해 Unitils의 assertLenientEquals를 사용했다.
+
+  앞 예제 소스와 동일한 테스트이지만, 이번엔 모델까지도 격리시켰다. 이제 순수하게 컨트롤러의 기능에만 집중되어 있는 테스트 케이스가 됐다.
+
+  ![](../images/7-8.jpg)
+
+  지금까지 웹 애플리케이션의 MVC 모델에서 컨트롤러를 테스트하는 방식에 대해 살펴봤다. 대부분의 경우 컨트롤러는 요청에서 데이터를 발췌하는 역할과 적절한 모델을 찾아 해당 데이터를 넘기는 일을 주로 하는데, 프레임워크 차원에서 지원해주는 경우에는 자칫 컨트롤러에 대한 테스트가 아니라, 프레임워크 자체를 테스트하는 모양이 될 수도 있으니 유의하자.
+
+
+
 
 
