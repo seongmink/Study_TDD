@@ -647,4 +647,71 @@ MVC 모델에서 컨트롤러를 테스트하는 가장 간단한 방법은 뷰�
   서비스 모델은 기능 위주로 구성된 클래스들로, DTO를 비롯한 여러 다른 도메인 클래스들을 사용하는 애플리케이션의 핵심적인 부분이다. 지금까지 TDD의 예제로 사용했던 부분들이 대부분 서비스 모델에 해당한다. 그리고 MVC 모델에서 TDD로 작성했을 때 가장 빛을 발하는 부분이 바로 이 부분이다. 다른 부분들보다도 테스트 커버리지율을 최대한 높일 필요가 있다. 필요하다면 100%가 된 상황에서도 추가 케이스를 작성한다. 이 부분에서는 별다른 논의점이 없다. 무조건 최대한 TDD로 만든다고 생각하면 편하다.
 
   대신, 논의할 만한 부분이 하나 있는데, 서비스 모델이 단순히 화면과 저장영역(DB) 사이의 통로가 될 뿐인 형태의 경우 TDD를 할 가치가 있느냐에 대한 부분이다.
+  
+- #### 스쳐 지나가는 서비스 모델(pass through service model)
 
+  인증, 권한처리 등의 공통사항은 기반이 되는 프레임워크가 처리해주고, 모델이 하는 일이라고는 SQL과 DAO를 연결해주는 것과, 결과값을 객체로 받는 것이 전부인 서비스 모델이 있다. 이를테면 사용자 등록, 전화번호 검색, 공지사항 출력, 목록 화면 등의 경우는 조건에 맞도록 SQL를 작성해 DB에서 정보를 가져오면 따로 더 이상 할 일이 없다.
+
+  ```mysql
+  SELECT 화면에필요한컬럼 FROM 테이블들 WHERE 조건절;
+  ```
+
+  ![](../images/7-9.jpg)
+
+  다음은 작성된 서비스 모델의 소스코드다.
+
+  ```java
+  public class ShipManager {
+      public ShippingList getActualShippingList(String shipperId) throws Exception {
+          String sqlName = "/gx/booking/retrieveActualShprList";
+          CommonDao dao = new CommonDao(sqlName, shipperId);
+          return (ShippingList)dao.executeQuery();
+      }
+  ...
+  ```
+
+  SQL 파일을 이름으로 읽어들여서 실행할 수 있게 도와주는 프레임워크 등을 사용했다. Biz 클래스라 불리는 서비스 모델의 getActualShippingList 메소드가 하는 일은 적절한 SQL 파일을 불러와서 DAO로 넘겨주는 게 전부다. 예제의 sqlName에 해당하는 SQL 파일은 다음과 같다.
+
+  ```xml
+  <?xml version="1.0" encoding="UTF-8"?>
+  <sqls>
+      <sql name="/gx/booking/retrieveActualShprList">
+          SELECT agent.CODE,
+                 agent.KOR_NAME,
+                 agent.ENG_NAME,
+                 agent.NATION_CODE,
+                 agent.TYPE
+          FROM tb_gxa101 agent
+          WHERE agent.type IN ('01', '02')
+          ...
+  ```
+
+  이런 경우에 TDD로 작성하는 것이 가능은 한 건지, 가능하더라도 효과는 있는 건지에 대한 논란의 소지가 있다. 보통 이럴 때는 한정적으로 TDD를 적용하게 된다. DAO를 통해 넘어온 결과의 건수, 헤더(header)에 해당하는 컬럼이름의 일치 여부 정도를 목표로 TDD를 적용한다.
+
+  ```java
+  @Test
+  public void testGetActualShippingList () {
+      ShipManager shipManager = new ShipManager();
+      ShippingList list = (ShippingList)shipManager.getActualShippingList("ITEM003");
+      
+      assertTrue(list.size() > 0);
+      assertEquals("[CODE, KOR_NAME, ENG_NAME, NATION_CODE, TYPE]", list.headers());
+  }
+  ```
+
+  모델 실행 결과의 데이터 건수와 헤더 컬럼 일치를 테스트한다. 건수는 보통 0, 1, 1 이상 정도로 체크한다. 모델 테스트임에도 사실 SQL 정상 작성 테스트에 더 가깝게 변했다. 장점은, SQL 문을 변경하면 그 즉시 에러가 나는 모델이 발견된다는 점이다. 크진 않지만 나름의 유용함이 있다. 하지만 이 방식을 적용할 때 유의해야 할 점이 하나 있다. 자칫 TDD의 의미를 잊고는, 헤더 비교하는 부분을 SQL 파일에서 복사해온다든가 SQL 실행 결과에서 가져다 붙이는 경우가 있는데, 절대 그러면 안 된다. 그건 DAO가 정상 동작하는지를 테스트하는 것이 돼버린다. TDD는 목표 이미지에 도달하도록 구현됐느냐를 판별하는 게 목적이다. 따라서 헤더 컬럼이름은 화면이나 화면설계서를 보고 assert 문을 작성해야 한다. Biz의 역할이 화면에 필요한 데이터를 가져오는 것이기 때문이다.
+
+  ```java
+  assertEquals("[CODE, KOR_NAME, ENG_NAME, NATION_CODE, TYPE]", list.headers());
+                ---------------------------------------------   ---------------
+                화면에서 필요한 부분                              모델 실행 결과로 받은
+                                                               헤더 부분
+  ```
+
+  이런 모델의 테스트는 다소 효율이 낮긴 하지만, 없는 것보다는 낫다. SQL 문의 변화에도, 화면요소의 변화에도 민감하게 반응해주기 때문이다.
+
+> **DTO, VO, DO, DAO, ENTITY, JavaBean**
+>
+> DTO(Data Transfer Object), VO(Value Object), DO(Domain Object), DAO(Data Access Object), ENTITY, JavaBean은 흔히 많이 혼용/오용되는 용어들이다. 소스코드의 모양으로 구분하려고 들면 혼란스러울 수 있다. 모델은 서비스 와 데이터로 나뉘고, 서비스에서 사용하는 데이터 객체는 일반적으로 DO(Domain Object, 혹은 Business Object)라고 부른다. DTO는 데이터 전달을 위해 사용되는 객체이며, 비즈니스적인 구현이 들어가 있지 않다. 예전에는 VO라고 불렸었다. JavaBean은 재사용을 위해 정의된 자바 컴포넌트를 지칭한다. 단, DTO로 많이 사용되는데, 좀 더 엄격한 점은 반드시 set/get으로 이름이 시작하는 메소드로만 데이터에 접근해야 한다는 점이다. DAO는 영속성 객체라 불리는 DB나 File 등과 데이터를 주고받기 위해 쓰이는 객체이며, 보통 매개체로 DTO를 사용한다. DAO를 서비스에 포함시키는 것이 일반적이지만, 따로 분리해서 생각하는 경우도 있다. ENTITY는 데이터 모델링에서 쓰이는 표현으로 DB의 테이블에 해당한다. ENTITY 클래스라고 불리는 클래스들은 DB의 ENTITY를 클래스 구조로 만들어놓은 모습이다. 프로그램으로 구현될 때는 종종 DO/DTO 의 모습을 갖는다. DTO와 DAO만 구분해서 사용할 수 있으면 대개 별 문제가 없다. 
+
+![](../images/7-10.jpg)
