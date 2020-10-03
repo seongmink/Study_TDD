@@ -724,3 +724,102 @@ MVC 모델에서 컨트롤러를 테스트하는 가장 간단한 방법은 뷰�
 - 컨트롤러가 프레임워크 차원에서 지원될 때는 굳이 테스트 케이스를 만들려고 하지 않는다.
 - 모델에 대한 TDD는 최대한으로 적용한다.
 
+## 데이터베이스
+
+TDD는 흔히 프로그래밍의 두 가지 경우를 예상해서 진행된다. 상태(state)와 동작 (behavior). 동작만 테스트하는 건 어렵지 않다. 또한 특정 상태만 테스트하는 것도 어렵지 않다. 그런데 이 두 개가 함께 섞이면 복잡해진다. 그 대표적인 예가 데이터베이스가 사용될 때다. 데이터베이스 관련 테스트는 몇 가지 어려움이 있는데 그중 대표적인 걸 뽑아본다면 다음과 같다
+
+- 테스트를 진행하면 데이터베이스에 들어 있는 데이터의 상태가 바뀐다. 
+- 테스트 전/후의 데이터 비교가 쉽지 않다.
+
+각각에 대한 일반적인 해결 방법을 살펴보자.
+
+### 데이터베이스 상태가 바뀌는 문제의 일반적인 해결 방법
+
+데이터베이스 상태 변경과 관련된 테스트 케이스는 어떻게 작성 가능한지 살펴보자. **다음 방법 중에서 자신에게 가장 잘 맞을 방법을 하나 선택해서 사용하면 된다.** 사용하다가 한계가 오는 것 같으면 다른 방법을 이용해보자. 아쉽게도 모든 경우에 대한 최선의 방법은 없다. 저자의 개인적인 생각으로는 DbUnit과 Unitils 조합을 선호하지만, 각각 학습이 필요하다는 점은 단점있다.
+
+#### 해결책1: 트랜잭션을 선언하고 테스트 케이스를 수행한 다음 롤백처리한다.
+
+```java
+public class DBRepositoryTest {
+    private final String protocol = "jdbc:derby:";
+    private final String dbName = "shopdb";
+    
+    private Connection connection;
+    private Repository repository;
+    
+    @Before
+    public void setUp() throws Exception {
+        repository = new DatabaseRepository();
+        connection = ((DatabaseRepository)repository).getConn();
+        connection.setAutoCommit(false); // (1)
+    }
+    
+    @After
+    public void tearDown() throws Exception {
+        this.connection.rollback(); // (2)
+        this.connection.close();
+    }
+    
+    @Test
+    public void testAddNewSeller() throws Exception {
+        Seller newSeller = new Seller("akahwl", "이호원", "akahwl12@gmail.com");
+        repository.add(newSeller);
+        assertEquals(newSeller, repository.findById("akahwl"));
+    }
+}
+```
+
+(1) : 트랜잭션을 선언한다.
+
+(2) : 테스트 케이스 수행이 끝난 다음엔 rollback으로 되돌린다.
+
+##### 테스트 케이스를 이용해 작성된 DatabaseRepositry의 모습
+
+```java
+public class DatabaseRepository implements Repository {
+    private final String driver = "org.apache.derby.jdbc.EmbeddedDriver";
+    private final String protocol = "jdbc:derby:";
+    private final String dbName = "shopdb";
+    private Connection conn;
+    
+    public DatabaseRepository() throws Exception { 
+        Class.forName(driver).newInstance();
+        setConn(DriverManager.getConnection(protocol + dbName));
+    }
+    
+    public void setConn(Connection conn) {
+        this.conn = conn;
+    }
+    
+    public Connection getConn() {
+        return conn;
+    }
+    
+    @Override
+    public void add(Seller seller) {
+        PreparedStatement stmt = null;
+        try {
+            String query = "insert into seller values (?, ?, ?)";
+            stmt = getConn().prepareStatement(query);
+            stmt.setString(1, seller.getId());
+            stmt.setString(2, seller.getName());
+            stmt.setString(3, seller.getEmail());
+            int affectedRows = stmt.executeUpdate();
+            if (affectedRows == 0) {
+                throw new SQLException("Seller adding fail!");
+            }
+            stmt.close();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+예제에서는 메소드 단위로 트랜잭션을 관리했지만, @BeforeClass를 이용해 테스트 클래스 단위로 트랜잭션을 관리할 수도 있다.
+
+| 구분 | 설명                                                         |
+| ---- | ------------------------------------------------------------ |
+| 장점 | 트랜잭션 선언만 처리되면 되기 때무네, 테스트 케이스 작성이 간단하다. |
+| 단점 | 테스트 케이스의 작성 목적이 '트랜잭션 처리'인 경우엔 적용 불가.<br />트랜잭션을 테스트 내에서 제어할 수 없는 경우에도 적용 불가. |
+
