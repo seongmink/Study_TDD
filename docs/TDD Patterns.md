@@ -705,7 +705,7 @@ MVC 모델에서 컨트롤러를 테스트하는 가장 간단한 방법은 뷰�
   assertEquals("[CODE, KOR_NAME, ENG_NAME, NATION_CODE, TYPE]", list.headers());
                 ---------------------------------------------   ---------------
                 화면에서 필요한 부분                              모델 실행 결과로 받은
-                                                               헤더 부분
+                                                                 헤더 부분
   ```
 
   이런 모델의 테스트는 다소 효율이 낮긴 하지만, 없는 것보다는 낫다. SQL 문의 변화에도, 화면요소의 변화에도 민감하게 반응해주기 때문이다.
@@ -818,8 +818,168 @@ public class DatabaseRepository implements Repository {
 
 예제에서는 메소드 단위로 트랜잭션을 관리했지만, @BeforeClass를 이용해 테스트 클래스 단위로 트랜잭션을 관리할 수도 있다.
 
-| 구분 | 설명                                                         |
-| ---- | ------------------------------------------------------------ |
-| 장점 | 트랜잭션 선언만 처리되면 되기 때무네, 테스트 케이스 작성이 간단하다. |
-| 단점 | 테스트 케이스의 작성 목적이 '트랜잭션 처리'인 경우엔 적용 불가.<br />트랜잭션을 테스트 내에서 제어할 수 없는 경우에도 적용 불가. |
+| 구분     | 설명                                                         |
+| -------- | ------------------------------------------------------------ |
+| **장점** | 트랜잭션 선언만 처리되면 되기 때무네, 테스트 케이스 작성이 간단하다. |
+| **단점** | 테스트 케이스의 작성 목적이 '트랜잭션 처리'인 경우엔 적용 불가.<br />트랜잭션을 테스트 내에서 제어할 수 없는 경우에도 적용 불가. |
 
+#### 해결책2 :  테스트 케이스 작성 시 '입력 → 수정 → 삭제' 순서대로 테스트 케이스가 실행되도록 만든다.
+
+```java
+@Test
+public void testAddNewSeller() throws Exception {
+    Seller newSeller = new Seller("akahwl", "이호원", "akahwl12@gmail.com");
+    repository.add(newSeller);
+    assertEquals(newSeller, repository.findById("akahwl"));
+}
+
+@Test
+public void testFindByIdSeller() throws Exception {
+    Seller expectedSeller = new Seller("akahwl", "이호원", "akahwl12@gmail.com");
+    assertEquals(expectedSeller, repository.findById("akahwl"));
+}
+
+@Test
+public void testUpdateSeller() throws Exception {
+    Seller seller = new Seller("akahwl", "이호원", "akahwl12@gmail.com");
+    repository.update(seller);
+    assertEquals(expectedSeller, repository.findById("akahwl"));
+}
+
+@Test
+public void testRemoveSeller() throws Exception {
+    Seller seller = new Seller("akahwl', "이호원", "akahwl12@gmail.com");
+    repository.remove(seller);
+    Seller actualSeller = repository.findById("akahwl");
+    assertEquals("존재하지 않는 ID입니다", actualSeller.getId());
+}
+```
+
+add → findById(=select) → update → remove 순서로 테스트가 진행된다.
+
+| 구분     | 설명                                                         |
+| -------- | ------------------------------------------------------------ |
+| **장점** | 테스트 케이스 작성 시에 큰 노력이 필요하지 않다.             |
+| **단점** | 입력/수정/삭제 세 기능 중 일부 기능이 업무적으로 지원되지 않을 경우엔 적용 불가능하다.<br />또한 테스트 케이스 실행 순서를 고려해야 하는데, 일반적으로 테스트 케이스 내에 선후 관계가 존재하도록 테스트 케이스를 만드는 걸 권장하지 않는다. 각각 독립적으로 수행될 수 있어야 하기 때문이다 |
+
+#### 해결책3 : SQL 스크립트가 테스트 수행 시에 실행되도록 만든다
+
+SQL 스크립트를 테스트 수행 전에 실행시키는 방법은 매우 다양하다. 
+
+- ####  ANT SQL TASK를 이용하는 방법(Ant를 이용해 테스트를 수행할 때)
+
+  ```xml
+  <?xml version="1.0" encoding="UTF-8"?>
+  <project name="sqlrun" default="initdb" basedir=".">
+      <target name="initdb">
+          <sql driver="org.apache.derby.jdbc.EmbeddedDriver"
+          url="jdbc:derby:shopdb"
+          userid="" password="">
+          <classpath>
+          	<fileset dir="${basedir}/lib" includes="**/*.jar" />
+          </classpath>
+          DROP TABLE item;
+          DROP TABLE seller;
+          INSERT INTO SELLER VALUES('seongmink', '김성민', 'sminggo5@naver.com');
+          INSERT INTO SELLER VALUES('wooyoung', '장우영', 'tmlu48@naver.com');
+          INSERT INTO SELLER VALUES('kidong','강기동', 'ki0050@naver.com');
+          </sql>
+      </target>
+  </project>
+  ```
+
+- #### SQL 스크립트 파일을 실행(자바의 커맨드 실행 방법으로)
+
+  ```java
+  @Before
+  public void setUp() throws Exception {
+      Process p = Runtime.getRuntime().exec("java org.apache.derby.tools.ijinitdb.sql");
+      p.waitFor();
+  }
+  ```
+
+- ####  Spring 프레임워크의 SimpleJdbcTestUtils를 이용(스프링 2.5 이후)
+
+  ```java
+  import javax.sql.DataSource;
+  
+  import org.junit.Before;
+  import org.junit.runner.RunWith;
+  import org.springframework.core.io.*;
+  import org.springframework.jdbc.core.simple.SimpleJdbcTemplate;
+  import org.springframework.test.jdbc.SimpleJdbcTestUtils;
+  import org.unitils.UnitilsJUnit4TestClassRunner;
+  import org.unitils.database.annotations.TestDataSource;
+  
+  @RunWith(UnitilsJUnit4TestClassRunner.class)
+  public class JDBCUtilTest {
+      @TestDataSource
+      DataSource dataSource;
+      
+      @Before
+      public void testScripts() throws Exception {
+          SimpleJdbcTemplate template = new SimpleJdbcTemplate(dataSource);
+          Resource resource = new ClassPathResource("/initdb.sql");
+          SimpleJdbcTestUtils.executeSqlScript(template, resource, true);
+      }
+  }
+  ```
+
+  ##### 클래스패스 내에 존재해야 하는 참조 라이브러리
+
+  ```
+  org.springframework.test-3.0.1.RELEASE-A.jar
+  org.springframework.jdbc-3.0.1.RELEASE-A.jar
+  org.springframework.core-3.0.1.RELEASE-A.jar
+  org.springframework.transaction-3.0.1.RELEASE-A.jar
+  unitils-core-3.1.jar
+  unitils-database-3.1.jar
+  ```
+
+이 외에도 방법은 매우 다양하다. 방식은 어찌 됐든, 기본적으로는 SQL 스크립트만을 유지보수하게 된다.
+
+| 구분     | 설명                                                         |
+| -------- | ------------------------------------------------------------ |
+| **장점** | 테스트 실행 상태를 만드는 작업과 테스트 수행 작업을 분리해서 관리할 수 있다.<br />SQL 문장만 제대로 작성하면 되기 때문에 편리하다. |
+| **단점** | SQL 스크립트를 실행시킬 유틸리티나 Ant 등이 필요하다.<br />자체 SQL 파일이 많아지면 별도의 관리가 필요하다. |
+
+#### 해결책4 : DbUnit을 사용한다.
+
+```java
+@Before
+public void setUp() throws Exception {
+    databaseTester = new JdbcDatabaseTester(driver, protocol + dbName);
+    connection = databaseTester.getConnection();
+    IDataSet dataSet = new FlatXmlDataSetBuilder().build(new File("seller.xml"));
+    DatabaseOperation.CLEAN_INSERT.execute(connection, dataSet);
+}
+```
+
+| 구분     | 설명                                                         |
+| -------- | ------------------------------------------------------------ |
+| **장점** | DbUnit의 여러 가지 기능을 사용해서 효과적으로 테스트 케이스를 작성할 수 있다.<br />SQL 문으로 일일히 작성하지 않아도 테스트에 사용할 데이터를 준비하기 쉽다. |
+| **단점** | DbUnit을 배워야 한다.<br />자칫 테스트 케이스 소스 여기저기에 데이터셋 파일이 산재하게 될 수 있다. |
+
+### 테스트 전후의 데이터베이스 상태를 비교하는 방법
+
+#### 해결책1 : 예상 결과를 미리 다른 테이블에 넣어놓고, 대상 테이블과 예상 테이블을 각각 Select 문으로 결과를 받아와서 비교한다.(가능은 하지만 매우 불편)
+
+#### 해결책2 : 예상 결과를 미리 문자열로 만들어놓고 Select 문을 실행해서 이용해 비교한다.
+
+오라클을 비롯한 대형 DBMS 제품들은 SQL 실행 결과를 파일로 만들어주는 기능을 제공한다. 그런 기능을 이용해서 파일비교의 문자열을 읽어들여서 비교한다. 예전에 급할 때 사용했던 방식이다. 지금도 프로그래밍이 아닌 계열에서 가끔씩 사용한다. 
+
+#### 해결책3 : DbUnit과 Unitils를 함께 사용한다.(권장)
+
+```java
+@Test
+@ExpectedDataSet("expected_seller.xml")
+public void testAddNewSeller() throws Exception {
+    Seller newSeller = new Seller("akahwl","이호원","akahwl12@gmail.com");
+    Repository repository = new DatabaseRepository();
+	repository.add(newSeller);
+}
+```
+
+### 데이터베이스가 연관된 부분에 대한 TDD 정리
+
+데이터베이스와 연관되어 있는 프로그램에 대해 TDD를 진행할 때, 크게 두 가지가 방법이 가장 효율이 높았다. @BeforeClass를 이용해 트랙잭션을 선언해놓고 '입력' -> '수정' -> '삭제' 순으로 동작시켰던 방식과 DbUnit, Unitils를 함께 사용하는 방식, 이렇게 두 가지다. 그 중에서도 특히 후자를 더 선호한다. 이 외에 하이버네이트 등의 ORM 프레임워크를 사용해 DB 관리를 최소한으로 만들어놓고, 객체 모델을 테스트에 좀 더 집중하는 방법도 있다.
