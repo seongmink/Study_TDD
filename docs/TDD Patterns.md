@@ -565,8 +565,7 @@ MVC 모델에서 컨트롤러를 테스트하는 가장 간단한 방법은 뷰�
       private SearchBiz searchBiz;
       @Override
       protected void service(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-          Employee emplyee = this.searchBiz.getEmployeeByEmpid(
-              request.getParameter("empid"));
+          Employee emplyee = this.searchBiz.getEmployeeByEmpid(request.getParameter("empid"));
           request.setAttribute("employee", emplyee);
           RequestDispatcher dispatcher = request.getRequestDispatcher("/SearchResult.jsp");
           dispatcher.forward(request, response);
@@ -577,7 +576,7 @@ MVC 모델에서 컨트롤러를 테스트하는 가장 간단한 방법은 뷰�
       }
   }
   ```
-
+  
 - #### 의존성을 줄인 컨트롤러 테스트 케이스 작성
 
   좀 더 나아가서, 완전히 컨트롤러만 테스트하고자 한다면, Mock을 이용해 모델까지도 Mock으로 전환할 수 있다.
@@ -705,7 +704,7 @@ MVC 모델에서 컨트롤러를 테스트하는 가장 간단한 방법은 뷰�
   assertEquals("[CODE, KOR_NAME, ENG_NAME, NATION_CODE, TYPE]", list.headers());
                 ---------------------------------------------   ---------------
                 화면에서 필요한 부분                              모델 실행 결과로 받은
-                                                                 헤더 부분
+                                                                  헤더 부분
   ```
 
   이런 모델의 테스트는 다소 효율이 낮긴 하지만, 없는 것보다는 낫다. SQL 문의 변화에도, 화면요소의 변화에도 민감하게 반응해주기 때문이다.
@@ -860,7 +859,7 @@ add → findById(=select) → update → remove 순서로 테스트가 진행된
 | 구분     | 설명                                                         |
 | -------- | ------------------------------------------------------------ |
 | **장점** | 테스트 케이스 작성 시에 큰 노력이 필요하지 않다.             |
-| **단점** | 입력/수정/삭제 세 기능 중 일부 기능이 업무적으로 지원되지 않을 경우엔 적용 불가능하다.<br />또한 테스트 케이스 실행 순서를 고려해야 하는데, 일반적으로 테스트 케이스 내에 선후 관계가 존재하도록 테스트 케이스를 만드는 걸 권장하지 않는다. 각각 독립적으로 수행될 수 있어야 하기 때문이다 |
+| **단점** | 입력/수정/삭제 세 기능 중 일부 기능이 업무적으로 지원되지 않을 경우엔 적용 불가능하다.<br />또한 테스트 케이스 실행 순서를 고려해야 하는데, 일반적으로 테스트 케이스 내에 선후 관계가 존재하도록 테스트 케이스를 만드는 걸 권장하지 않는다.<br />각각 독립적으로 수행될 수 있어야 하기 때문이다 |
 
 #### 해결책3 : SQL 스크립트가 테스트 수행 시에 실행되도록 만든다
 
@@ -976,7 +975,7 @@ public void setUp() throws Exception {
 public void testAddNewSeller() throws Exception {
     Seller newSeller = new Seller("akahwl","이호원","akahwl12@gmail.com");
     Repository repository = new DatabaseRepository();
-	repository.add(newSeller);
+    repository.add(newSeller);
 }
 ```
 
