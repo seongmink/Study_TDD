@@ -193,7 +193,7 @@ TDD는 프로그램의 가장 하위 부분인 단위 메소드의 기능에 집
   ```
 
   사실 TDD의 테스트 케이스를 잘 살펴보면 test라는 이름으로 시작했기 때문에 흔히 맞는지 틀리는지(true or false)만을 체크하는 식으로 이름을 짓게 된다. 하지만 행위 기준으로 보면 예상하는 행동을 하는지(should do something) 위주로 작성하게 된다. 언뜻 보면 비슷한 듯 보이지만, 사실 잘 살펴보면 지향하는 바가 조금 다르다.
-  
+
 - ### BDD 접근 전략
 
   개발 시에 BDD와 TDD 중 꼭 하나만을 선택해야 하는 건 아니다. 각각 필요한 영역이 다르기 때문이다. 고객은 알 필요가 없지만, 개발자는 반드시 알아야 하고 견뎌내야 하는 로직을 다룰 때는 TDD가 좋다. 그리고 고객 관점에서 이야기하거나 대상 시스템의 최종 형태를 파악하며 개발해야 할 때, BDD를 우선적으로 사용한다.
@@ -212,23 +212,23 @@ TDD는 프로그램의 가장 하위 부분인 단위 메소드의 기능에 집
 
   마지막으로, BDD는 대략 어떠한 모습으로 만들어지는지 간략한 예제로 살펴보자. 다음은 JBehave(http://jbehave.org/)라는 BDD 프레임워크로 만들어진 테스트 케이스 예제다.
 
-  ##### JBehave로 만들어진 코드 샘플
+    ##### JBehave로 만들어진 코드 샘플
 
   ```java
   public class LoginSteps extends Steps {
   // setup 코드들
-      ...
-          
+  ...
+            
       @Given("로그인하지 않은 상태라고 가정하고")
       public void logOut() {
-          page.click("logout");
-      }
-  
+      	page.click("logout");
+  	}
+    
       @When("$username과 패스워드 $password로 로그인했을 때")
       public void logIn(String username, String password) {
           page.click("login");
       }
-      
+        
       @Then("다음과 같은 메시지가 보여야 한다, \"$message\"")
       public void checkMessage(String message) {
           ensureThat(page, containsMessage(message));
@@ -236,9 +236,9 @@ TDD는 프로그램의 가장 하위 부분인 단위 메소드의 기능에 집
   }
   ```
 
-  다음은 easyb(http://www.easyb.org/)로 작성된 테스트 케이스 예제다.
+    ##### 다음은 easyb(http://www.easyb.org/)로 작성된 테스트 케이스 예제다.
 
-  ##### easyB로 작성된 테스트 코드
+    ##### easyB로 작성된 테스트 코드
 
   ```java
   scenario "계좌에서 인출하기", {
@@ -247,12 +247,12 @@ TDD는 프로그램의 가장 하위 부분인 단위 메소드의 기능에 집
               account = new Account()
               account.balance = initialBalance
       }
-      
+        
       when "1000원을 인출하면", {
           withdrawals = 1000
               account.withdraw(withdrawals)
       }
-  
+    
       then "1000원을 뺀 나머지금액 9000원이 있어야 한다", {
           account.balance.shouldBe initialBalance - withdrawals
       }
